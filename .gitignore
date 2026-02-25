@@ -7,3 +7,4 @@ __pycache__/
 alembic/versions/
 # SQLite database file
 test.db
+avatars/
