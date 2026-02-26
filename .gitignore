@@ -8,3 +8,4 @@ alembic/versions/
 # SQLite database file
 test.db
 avatars/
+.env
