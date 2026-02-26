@@ -1,5 +1,5 @@
 """
-Pydantic модели для валидации
+Описание моделей и схем валидации
 """
 
 from pydantic import BaseModel, Field
