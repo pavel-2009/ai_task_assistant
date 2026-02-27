@@ -13,6 +13,7 @@ class TaskBase(BaseModel):
     """Базовый класс задачи"""
     title: str = Field(min_length=1, max_length=20, description="Название задачи")
     description: str = Field(max_length=400, description="Описание задачи")
+    avatar_file: str = Field(max_length=256, description="Путь к файлу аватара задачи", default=None)
 
 
 
@@ -37,7 +38,6 @@ class UserBase(BaseModel):
     username: str = Field(min_length=1, max_length=20, description="Имя пользователя")
 
 
-
 class UserCreate(UserBase):
     """Класс для создания пользователя"""
     password: str = Field(min_length=6, max_length=128, description="Пароль пользователя")
@@ -57,6 +57,7 @@ class Task(Base):
     title = Column(String(20), nullable=False)
     description = Column(String(400), nullable=True)
     author_id = Column(Integer, nullable=False)
+    avatar_file = Column(String(256), nullable=True)
 
 
 class User(Base):
@@ -66,3 +67,4 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(20), unique=True, nullable=False)
     password = Column(String(128), nullable=False)
+    

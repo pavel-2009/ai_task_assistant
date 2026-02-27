@@ -7,7 +7,7 @@ import torchvision
 import numpy as np
 import cv2
 
-from image_ops import validate_image, resize_image
+from .image_ops import validate_image, resize_image
 
 
 model = torchvision.models.resnet18(

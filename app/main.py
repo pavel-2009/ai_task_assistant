@@ -18,6 +18,7 @@ from .models import TaskGet, TaskCreate, TaskUpdate, Task, User, UserCreate, Use
 from .auth import hash_password, verify_password, create_access_token
 from .db import get_async_session
 from .utils.image_ops import validate_image, resize_image
+from .utils.cv_model import predict_image_class
 
 load_dotenv()
 
@@ -243,7 +244,61 @@ async def upload_avatar(
     with open(f"avatars/{filename}", "wb") as f:
         f.write(image)
 
+    await session.execute(
+        update(Task).where(Task.id == task_id).values(avatar_file=f"avatars/{filename}")
+    )
+    await session.commit()
+
     return {"filepath": f"avatars/{filename}", "filename": filename}
+
+
+@app.post("/tasks/{task_id}/predict", status_code=status.HTTP_200_OK, description="Предсказание класса изображения для задачи")
+async def predict_img_class(
+    task_id: int = Path(...),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Предсказание класса изображения аватара для задачи"""
+
+    if not current_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Требуется аутентификация"
+        )
+
+    task = await session.execute(select(Task).where(Task.id == task_id))
+    task = task.scalar_one_or_none()
+
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Задача с указанным ID не найдена"
+        )
+    
+    if task.avatar_file is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Для этой задачи не загружен аватар"
+        )
+    
+    image_path = task.avatar_file
+    if not os.path.exists(image_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Файл аватара не найден"
+        )
+
+    with open(image_path, "rb") as f:
+        image_bytes = f.read()
+
+    try:
+        predicted_class = predict_image_class(image_bytes)
+        return {"predicted_class": predicted_class}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
 
 
 # === ЭНДПОИНТЫ АУТЕНТИФИКАЦИИ ===
