@@ -44,7 +44,10 @@ def test_predict_image_class(client):
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    with open("tests/1.jpeg", "rb") as f:
+    from pathlib import Path
+    image_path = Path(__file__).parent / "1.jpeg"
+    
+    with open(image_path, "rb") as f:
         image_bytes = f.read()
 
     task_create_response = client.post("/tasks", json={"title": "Test Task", "description": "dsdsds"}, headers=headers)
