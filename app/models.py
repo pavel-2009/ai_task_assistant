@@ -2,7 +2,7 @@
 Описание моделей и схем валидации
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import Column, Integer, String
 
 from app.db import Base
@@ -31,6 +31,8 @@ class TaskGet(TaskBase):
     """Класс для получения задачи"""
     id: int
     author_id: int = Field(description="ID автора задачи")
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserBase(BaseModel):
