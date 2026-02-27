@@ -1,5 +1,5 @@
 """
-Pydantic модели для валидации
+Описание моделей и схем валидации
 """
 
 from pydantic import BaseModel, Field
@@ -67,4 +67,3 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(20), unique=True, nullable=False)
     password = Column(String(128), nullable=False)
-    
