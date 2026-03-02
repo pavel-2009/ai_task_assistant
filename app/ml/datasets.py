@@ -20,6 +20,8 @@ class TaskImageDataset(Dataset):
         self.root_dir = root_dir
         self.image_paths = list(Path(root_dir).glob("*.jpeg*"))
         self.transforms = transforms
+        self.classes = ["unknown"] 
+        self.class_to_idx = {"unknown": 0}
 
 
     def __len__(self) -> int:
