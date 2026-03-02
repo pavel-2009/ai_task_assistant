@@ -8,6 +8,7 @@ from PIL import Image
 
 from pathlib import Path
 from typing import Tuple, List
+import random
 
 
 class TaskImageDataset(Dataset):
@@ -26,7 +27,7 @@ class TaskImageDataset(Dataset):
         return len(self.image_paths)
 
     
-    def __getitem__(self, index) -> Tuple[torch.Tensor, str]:
+    def __getitem__(self, index) -> Tuple[torch.Tensor, float]:
         """Получение элемента датасета по индексу. Возвращает пару (изображение, имя файла)"""
         image_path = self.image_paths[index]
         image = Image.open(image_path).convert("RGB")
@@ -35,4 +36,4 @@ class TaskImageDataset(Dataset):
             for transform in self.transforms:
                 image = transform(image) 
 
-        return (image, image_path.name)
+        return (image, random.randint(0, 2))
