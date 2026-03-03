@@ -8,7 +8,6 @@ from PIL import Image
 
 from pathlib import Path
 from typing import Tuple, List
-import random
 
 
 class TaskImageDataset(Dataset):
@@ -19,6 +18,8 @@ class TaskImageDataset(Dataset):
     def __init__(self, root_dir: str, transforms: List = None):
         self.root_dir = root_dir
         self.image_paths = list(Path(root_dir).glob("*.jpeg*"))
+        if not self.image_paths:
+            raise ValueError(f"Нет изображений в директории {root_dir}")
         self.transforms = transforms
         self.classes = ["unknown"] 
         self.class_to_idx = {"unknown": 0}
@@ -35,7 +36,6 @@ class TaskImageDataset(Dataset):
         image = Image.open(image_path).convert("RGB")
 
         if self.transforms:
-            for transform in self.transforms:
-                image = transform(image) 
+            image = self.transforms(image)
 
-        return (image, random.randint(0, 2))
+        return (image, 0)
