@@ -20,7 +20,7 @@ class MLConfig(BaseSettings):
     mean: list[float] = [0.485, 0.456, 0.406]
     std: list[float] = [0.229, 0.224, 0.225]
     learning_rate: float = 0.001
-    num_epochs: int = 10
+    num_epochs: int = 20
 
 
 config = MLConfig()

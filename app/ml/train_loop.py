@@ -8,11 +8,10 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from typing import Tuple
-from pathlib import Path
 
 from config import config
 from datasets import TaskImageDataset
-from models_nn import SimpleCNN
+from models_nn import SimpleCNN, get_pretrained_model
 
 
 OUTPUT_DIR = config.output_dir
@@ -88,7 +87,7 @@ if __name__ == "__main__":
     validate_dataset = TaskImageDataset(root_dir=config.data_dir, transforms=validate_transforms)
 
     # Инициализация модели, функции потерь и оптимизатора
-    model = SimpleCNN(num_classes=config.num_classes).to(device)
+    model = get_pretrained_model().to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
 

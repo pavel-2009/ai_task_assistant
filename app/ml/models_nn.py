@@ -4,6 +4,9 @@
 
 from torch import nn
 import torch
+from torchvision import models
+
+from config import config
 
 
 class SimpleCNN(nn.Module):
@@ -43,3 +46,16 @@ class SimpleCNN(nn.Module):
 
         return x
     
+
+def get_pretrained_model() -> nn.Module:
+    """Загрузка предобученной модели ResNet18"""
+
+    model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+
+    for param in model.parameters():
+        param.requires_grad = False
+
+    num_features = model.fc.in_features
+    model.fc = nn.Linear(num_features, config.num_classes)
+
+    return model

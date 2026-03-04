@@ -17,12 +17,12 @@ class TaskImageDataset(Dataset):
 
     def __init__(self, root_dir: str, transforms: List = None):
         self.root_dir = root_dir
-        self.image_paths = list(Path(root_dir).glob("*.jpeg*"))
+        self.image_paths = list(Path(root_dir).glob("*.jpeg")) + \
+                           list(Path(root_dir).glob("*.jpg")) + \
+                           list(Path(root_dir).glob("*.png"))
         if not self.image_paths:
             raise ValueError(f"Нет изображений в директории {root_dir}")
         self.transforms = transforms
-        self.classes = ["unknown"] 
-        self.class_to_idx = {"unknown": 0}
 
 
     def __len__(self) -> int:
@@ -38,4 +38,6 @@ class TaskImageDataset(Dataset):
         if self.transforms:
             image = self.transforms(image)
 
-        return (image, 0)
+        label = image_path.name.split("_")[0]
+
+        return (image, int(label))
