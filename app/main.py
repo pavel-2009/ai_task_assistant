@@ -13,20 +13,42 @@ import typing
 import os
 import uuid
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 
 from .models import TaskGet, TaskCreate, TaskUpdate, Task, User, UserCreate, UserGet, UserBase
 from .auth import hash_password, verify_password, create_access_token
 from .db import get_async_session
 from .utils.image_ops import validate_image, resize_image
 from .utils.cv_model import predict_image_class
+from .ml.inference_service import InferenceService
+from .ml.config import config
 
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 
+IDX_TO_CLASS = {0: "cat", 1: "dog", 2: "house"} 
+
+
+# lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global ml_service
+    print("🚀 Loading ML model...")
+    checkpoints_path = config.output_dir / "model.pth"
+    ml_service = InferenceService(
+        checkpoints_path=checkpoints_path,
+        idx_to_class=IDX_TO_CLASS
+    )
+    print("✅ Model loaded successfully!")
+    yield
+    print("🛑 Shutting down ML service...")
+
+
 # Создание приложения
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -292,8 +314,8 @@ async def predict_img_class(
         image_bytes = f.read()
 
     try:
-        predicted_class = predict_image_class(image_bytes)
-        return {"predicted_class": predicted_class}
+        predictions = ml_service.predict(image_bytes)
+        return {"predicted_class": predictions["class_name"], "confidence": predictions["confidence"]}
     except ValueError as e:
         raise HTTPException(
             status_code=400,
