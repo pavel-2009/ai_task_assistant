@@ -14,6 +14,7 @@ import os
 import uuid
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+from PIL import Image
 
 from .models import TaskGet, TaskCreate, TaskUpdate, Task, User, UserCreate, UserGet, UserBase
 from .auth import hash_password, verify_password, create_access_token
@@ -249,6 +250,14 @@ async def upload_avatar(
 
     with image.file as f:
         image_bytes = f.read()
+
+    try: 
+        image = Image.open(image.file)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Невалидное изображение: {e}"
+        )
 
     if not validate_image(image_bytes):
         raise HTTPException(
