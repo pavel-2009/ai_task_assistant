@@ -1,0 +1,18 @@
+version: '0.1'
+
+services:
+  api:
+    build: .
+    container_name: ai_task_assistant
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./avatars:/app/avatars
+      - ./checkpoints:/app/checkpoints
+      - ./test.db:/app/test.db
+
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SECRET_KEY=ab9bafa5578421297f7af89812af2a5c7126e2941f01c209f3ccb256b13916dc
+
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
