@@ -15,4 +15,4 @@ def detect_and_visualize_task(task_id: int, image_path: str) -> dict:
     
     detections, visualized_image_path = yolo_service.predict_and_visualize(image_bytes, task_id)
     
-    return {"detections": detections, "visualized_image": visualized_image_path}
+    return {"detections": detections, "visualized_image": str(visualized_image_path)}
