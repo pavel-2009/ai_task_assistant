@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY prod_req.txt .
+
 RUN pip install --no-cache-dir -r prod_req.txt
 
 COPY . .

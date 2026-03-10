@@ -10,6 +10,8 @@ from pathlib import Path
 
 
 MODEL_PATH = 'yolov8n.pt'
+VISUALIZATION_DIR = Path(__file__).parent.parent.parent / 'avatars' / 'visualizations'
+VISUALIZATION_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class YoloService:
@@ -21,7 +23,7 @@ class YoloService:
         self.model.to('cpu')
         
         
-    def predict(self, image_bytes: bytes) -> list[dict]:
+    def predict_and_visualize(self, image_bytes: bytes, task_id: int) -> list[dict]:
         """Получения предсказаний модели для изображения"""
         
         image = Image.open(io.BytesIO(image_bytes))
@@ -34,6 +36,7 @@ class YoloService:
             classes = result.boxes.cls
             confidence = result.boxes.conf
             
+            
             for box, cls, conf in zip(boxes, classes, confidence):
                 dict_result.append({
                     'class': int(cls),
@@ -42,6 +45,10 @@ class YoloService:
                     'box': [float(coord) for coord in box]
                 })
                 
-        return dict_result
+        im = results[0].plot()
+                
+        Image.fromarray(im).save(VISUALIZATION_DIR / f'result_{task_id}.jpg')
+                
+        return dict_result, VISUALIZATION_DIR / f'result_{task_id}.jpg'
     
         

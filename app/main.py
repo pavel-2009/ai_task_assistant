@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 import jwt
 from jwt.exceptions import InvalidTokenError
+from celery.result import AsyncResult
 
 import typing
 import os
@@ -23,6 +24,7 @@ from .utils.image_ops import validate_image, resize_image
 from .ml.inference_service import InferenceService
 from .ml.yolo_service import YoloService, MODEL_PATH
 from .ml.config import config
+from .ml.tasks import detect_and_visualize_task
 
 
 logging.basicConfig(level=logging.INFO)
@@ -382,13 +384,13 @@ async def predict_img_class(
         )
         
         
-@app.post("/tasks/{task_id}/detect", status_code=status.HTTP_200_OK, description="Детекция объектов на аватарке задачи")
+@app.post("/tasks/{task_id}/detect/submit", status_code=status.HTTP_202_ACCEPTED, description="Детекция объектов на аватарке задачи")
 async def detect_objects(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session)
 ):
-    """Детекция объектов на аватарке задачи"""
+    """Создание фоновой задачи для детекции объектов на аватарке задачи"""
     
     if not current_user:
         raise HTTPException(
@@ -399,13 +401,13 @@ async def detect_objects(
     task = await session.execute(select(Task).where(Task.id == task_id))
     task = task.scalar_one_or_none()
     
-    if task is None:
+    if not task:
         raise HTTPException(
             status_code=404,
             detail="Задача с указанным ID не найдена"
         )
         
-    if task.avatar_file is None:
+    if not task.avatar_file:
         raise HTTPException(
             status_code=400,
             detail="Для этой задачи не загружен аватар"
@@ -418,18 +420,70 @@ async def detect_objects(
             detail="Файл аватара не найден"
         )
         
-    with open(image_path, "rb") as f:
-        image_bytes = f.read()
-        
-    try:
-        detections = yolo_service.predict(image_bytes)
-        return {"detections": detections}
+    celery_task = detect_and_visualize_task.delay(task_id=task_id, image_path=image_path)
+    
+    return {"message": "Задача на детекцию объектов успешно создана", "celery_task_id": celery_task.id}
 
-    except ValueError as e:
+
+@app.post("/tasks/{task_id}/detect/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов детекции объектов на аватарке задачи")
+async def get_detection_results(
+    task_id: int = Path(...),
+    celery_task_id: str = Path(...),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Получение результатов детекции объектов на аватарке задачи"""
+    
+    if not current_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Требуется аутентификация"
+        )
+        
+    task = await session.execute(select(Task).where(Task.id == task_id))
+    task = task.scalar_one_or_none()
+    
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Задача с указанным ID не найдена"
+        )
+        
+    if not task.avatar_file:
         raise HTTPException(
             status_code=400,
-            detail=str(e)
+            detail="Для этой задачи не загружен аватар"
         )
+        
+    image_path = task.avatar_file
+    if not os.path.exists(image_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Файл аватара не найден"
+        )
+        
+    celery_task = AsyncResult(celery_task_id)
+    if not celery_task:
+        raise HTTPException(
+            status_code=404,
+            detail="Задача Celery с указанным ID не найдена"
+        )
+        
+    if celery_task.state == "PENDING":
+        return {"status": "PENDING", "message": "Задача еще не началась"}
+    
+    elif celery_task.state == "STARTED":
+        return {"status": "STARTED", "message": "Задача выполняется"}
+    
+    elif celery_task.state == "SUCCESS":
+        result = celery_task.result
+        return {"status": "SUCCESS", "result": result}
+    
+    elif celery_task.state == "FAILURE":
+        return {"status": "FAILURE", "message": "Задача завершилась с ошибкой"}
+    
+    else:
+        return {"status": celery_task.state, "message": "Задача в неизвестном состоянии"}
 
 
 # === ЭНДПОИНТЫ АУТЕНТИФИКАЦИИ ===
