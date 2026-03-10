@@ -43,4 +43,5 @@ class YoloService:
                 })
                 
         return dict_result
+    
         
