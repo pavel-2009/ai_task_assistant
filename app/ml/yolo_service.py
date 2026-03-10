@@ -9,7 +9,7 @@ import io
 from pathlib import Path
 
 
-MODEL_PATH = 'yolov8n.pt'   # Path(__file__).parent.parent.parent / 'runs' / 'detect' / 'runs' / 'detect' / 'task_detector_v1' / 'weights' / 'best.pt'
+MODEL_PATH = 'yolov8n.pt'
 
 
 class YoloService:
