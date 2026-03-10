@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
         
         try:
             logger.info("🚀 Loading YOLO model...")
-            yolo_service = YoloService(model_path=MODEL_PATH)
+            yolo_service = YoloService(MODEL_PATH)
             logger.info("✅ YOLO model loaded successfully!")
         
         except Exception as e:

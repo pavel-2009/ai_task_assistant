@@ -9,15 +9,16 @@ import io
 from pathlib import Path
 
 
-MODEL_PATH = Path(__file__).parent.parent.parent / 'runs' / 'detect' / 'runs' / 'detect' / 'task_detector_v1' / 'weights' / 'best.pt'
+MODEL_PATH = 'yolov8n.pt'   # Path(__file__).parent.parent.parent / 'runs' / 'detect' / 'runs' / 'detect' / 'task_detector_v1' / 'weights' / 'best.pt'
 
 
 class YoloService:
     """Сервис для инференса модели YOLOv8."""
     
-    def __init__(self, model_path: Path = MODEL_PATH):
+    def __init__(self, model_path: Path | str = MODEL_PATH):
         """Инициализация модели."""
         self.model = YOLO(model_path)
+        self.model.to('cpu')
         
         
     def predict(self, image_bytes: bytes) -> list[dict]:
