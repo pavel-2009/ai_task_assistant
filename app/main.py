@@ -5,7 +5,7 @@
 from fastapi import FastAPI, status, Path, HTTPException, Depends, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text, select, update, delete
+from sqlalchemy import select, update, delete
 import jwt
 from jwt.exceptions import InvalidTokenError
 
@@ -14,15 +14,19 @@ import os
 import uuid
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
-from PIL import Image
+import logging
 
-from .models import TaskGet, TaskCreate, TaskUpdate, Task, User, UserCreate, UserGet, UserBase
+from .models import TaskGet, TaskCreate, TaskUpdate, Task, User, UserCreate, UserGet
 from .auth import hash_password, verify_password, create_access_token
 from .db import get_async_session
 from .utils.image_ops import validate_image, resize_image
-from .utils.cv_model import predict_image_class
 from .ml.inference_service import InferenceService
+from .ml.yolo_service import YoloService, MODEL_PATH
 from .ml.config import config
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -36,15 +40,68 @@ IDX_TO_CLASS = {0: "cat", 1: "dog", 2: "house"}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global ml_service
-    print("🚀 Loading ML model...")
-    checkpoints_path = config.output_dir / "model.pth"
-    ml_service = InferenceService(
-        checkpoints_path=checkpoints_path,
-        idx_to_class=IDX_TO_CLASS
-    )
-    print("✅ Model loaded successfully!")
+    global yolo_service
+    
+    # === STARTUP ===
+    try:
+        logger.info("🚀 Starting app...")
+        
+        try: 
+            logger.info("🚀 Loading ML model from %s", config.output_dir / "model")
+            checkpoints_path = config.output_dir / "model.pth"
+            ml_service = InferenceService(
+                checkpoints_path=checkpoints_path,
+                idx_to_class=IDX_TO_CLASS
+            )
+            logger.info("✅ ML model loaded successfully!")
+        
+        except Exception as e:
+            logger.error("❌ Failed to load ML model: %s", str(e))
+            raise
+        
+        try:
+            logger.info("🚀 Loading YOLO model...")
+            yolo_service = YoloService(model_path=MODEL_PATH)
+            logger.info("✅ YOLO model loaded successfully!")
+        
+        except Exception as e:
+            logger.error("❌ Failed to load YOLO model: %s", str(e))
+            raise
+        
+    except Exception as e:
+        logger.error("❌ Error during app startup: %s", str(e))
+        raise
+        
     yield
-    print("🛑 Shutting down ML service...")
+            
+    # === SHUTDOWN ===
+    try:
+        logger.info("🛑 Shutting down app...")
+        
+        if ml_service:
+            try: 
+                del ml_service
+                logger.info("✅ ML service cleaned up successfully!")
+            
+            except Exception as e:
+                logger.error("❌ Failed to clean up ML service: %s", str(e))
+                raise
+            
+        if yolo_service:
+            try:
+                del yolo_service
+                logger.info("✅ YOLO service cleaned up successfully!")
+            
+            except Exception as e:
+                logger.error("❌ Failed to clean up YOLO service: %s", str(e))
+                raise
+            
+        logger.info("✅ App shutdown completed successfully!")
+        
+    except Exception as e:
+        logger.error("❌ Error during app shutdown: %s", str(e))
+            
+
 
 
 # Создание приложения
@@ -251,13 +308,6 @@ async def upload_avatar(
     with image.file as f:
         image_bytes = f.read()
 
-    try: 
-        image = Image.open(image.file)
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Невалидное изображение: {e}"
-        )
 
     if not validate_image(image_bytes):
         raise HTTPException(
@@ -325,6 +375,56 @@ async def predict_img_class(
     try:
         predictions = ml_service.predict(image_bytes)
         return {"predicted_class": predictions["class_name"], "confidence": predictions["confidence"]}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+        
+        
+@app.post("/tasks/{task_id}/detect", status_code=status.HTTP_200_OK, description="Детекция объектов на аватарке задачи")
+async def detect_objects(
+    task_id: int = Path(...),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Детекция объектов на аватарке задачи"""
+    
+    if not current_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Требуется аутентификация"
+        )
+        
+    task = await session.execute(select(Task).where(Task.id == task_id))
+    task = task.scalar_one_or_none()
+    
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Задача с указанным ID не найдена"
+        )
+        
+    if task.avatar_file is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Для этой задачи не загружен аватар"
+        )
+        
+    image_path = task.avatar_file
+    if not os.path.exists(image_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Файл аватара не найден"
+        )
+        
+    with open(image_path, "rb") as f:
+        image_bytes = f.read()
+        
+    try:
+        detections = yolo_service.predict(image_bytes)
+        return {"detections": detections}
+
     except ValueError as e:
         raise HTTPException(
             status_code=400,

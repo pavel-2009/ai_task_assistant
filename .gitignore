@@ -9,3 +9,6 @@ alembic/versions/
 test.db
 avatars/
 .env
+runs/
+data/
+logs/
