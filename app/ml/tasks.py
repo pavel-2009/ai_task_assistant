@@ -2,18 +2,30 @@
 Асинхронные задачи для обработки изображений с помощью модели YOLO.
 """
 
-from app.celery_app import celery_app, yolo_service, segmentation_service
+from app.celery_app import celery_app, get_inference_service, get_segmentation_service, get_yolo_service
 
 from pathlib import Path
-import logging
 
-logger = logging.getLogger(__name__)
 
+@celery_app.task(name="predict_avatar_class")
+def predict_avatar_class(task_id: int, image_path: str) -> dict:
+    """Фоновая задача для предсказания класса аватарки задачи."""
+    
+    inference_service = get_inference_service()
+    
+    with open(image_path, "rb") as f:
+        image_bytes = f.read()
+    
+    predicted_class = inference_service.predict(image_bytes)
+    
+    return predicted_class
 
 
 @celery_app.task(name="detect_and_visualize_task")
 def detect_and_visualize_task(task_id: int, image_path: str) -> dict:
     """Фоновая задача для обнаружения объектов на изображении и сохранения визуализации."""
+    
+    yolo_service = get_yolo_service()
     
     with open(image_path, "rb") as f:
         image_bytes = f.read()
@@ -27,6 +39,8 @@ def detect_and_visualize_task(task_id: int, image_path: str) -> dict:
 def segment_image_task(task_id: int, image_path: str) -> bytes:
     """Фоновая задача для сегментации изображения."""
     
+    segmentation_service = get_segmentation_service()
+    
     try:
         with open(image_path, "rb") as f:
             image_bytes = f.read()
@@ -35,19 +49,13 @@ def segment_image_task(task_id: int, image_path: str) -> bytes:
         
         path_to_save = Path("/app/avatars/segments") / f"{task_id}_segmentation.png"
         
-        logger.info(f"Saving segmentation result to: {path_to_save}")
-        
         if not path_to_save.parent.exists():
-            logger.info(f"Creating directory: {path_to_save.parent}")
             path_to_save.parent.mkdir(parents=True, exist_ok=True)
         
         with open(path_to_save, "wb") as f:
             f.write(segmented_image_bytes)
         
-        logger.info(f"✅ Segmentation saved successfully: {path_to_save}")
-        
         return segmented_image_bytes
     
     except Exception as e:
-        logger.error(f"❌ Error in segment_image_task: {str(e)}", exc_info=True)
         raise

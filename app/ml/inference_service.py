@@ -59,4 +59,4 @@ class InferenceService:
             prob, idx = torch.max(probabilities, dim=1)
             name = self.idx_to_class[idx.item()]
 
-        return {"class_id": idx, "class_name": name, "confidence": float(prob)}
+        return {"class_id": int(idx.item()), "class_name": name, "confidence": float(prob.item())}

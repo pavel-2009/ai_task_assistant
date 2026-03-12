@@ -13,6 +13,9 @@ MODEL_PATH = 'yolov8n.pt'
 VISUALIZATION_DIR = Path(__file__).parent.parent.parent / 'avatars' / 'visualizations'
 VISUALIZATION_DIR.mkdir(parents=True, exist_ok=True)
 
+EXPORT_DIR = Path(__file__).parent.parent.parent / "checkpoints" / "onnx"
+EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 class YoloService:
     """Сервис для инференса модели YOLOv8."""
@@ -51,4 +54,26 @@ class YoloService:
                 
         return dict_result, VISUALIZATION_DIR / f'result_{task_id}.jpg'
     
+    
+    def export_onnx(self):
+        """Экспорт модели в ONNX"""
         
+        onnx_path = self.model.export(
+            format="onnx",
+            imgsz=640,
+            dynamic=False,
+            half=False,
+            verbose=False,
+            project=str(EXPORT_DIR),
+            name="yolov8n_onnx"
+        )
+        
+        return onnx_path
+    
+
+if __name__ == '__main__':
+    service = YoloService()
+    
+    onnx_path = service.export_onnx()
+    
+    print(f"Успешно экспортированно в {onnx_path}")
