@@ -6,6 +6,7 @@ from celery import Celery
 import os
 
 from app.ml.yolo_service import YoloService
+from app.ml.segmentation_service import SegmentationService
 
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
@@ -31,3 +32,4 @@ celery_app.conf.update(
 
 
 yolo_service = YoloService()
+segmentation_service = SegmentationService()

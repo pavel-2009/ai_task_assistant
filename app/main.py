@@ -3,6 +3,7 @@
 """
 
 from fastapi import FastAPI, status, Path, HTTPException, Depends, UploadFile
+from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
@@ -12,6 +13,7 @@ from celery.result import AsyncResult
 
 import typing
 import os
+from pathlib import Path as PathlibPath
 import uuid
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
@@ -24,7 +26,7 @@ from .utils.image_ops import validate_image, resize_image
 from .ml.inference_service import InferenceService
 from .ml.yolo_service import YoloService, MODEL_PATH
 from .ml.config import config
-from .ml.tasks import detect_and_visualize_task
+from .ml.tasks import detect_and_visualize_task, segment_image_task
 
 
 logging.basicConfig(level=logging.INFO)
@@ -484,7 +486,150 @@ async def get_detection_results(
     
     else:
         return {"status": celery_task.state, "message": "Задача в неизвестном состоянии"}
+    
+    
+@app.post("/tasks/{task_id}/segment/submit", status_code=status.HTTP_202_ACCEPTED, description="Сегментация аватарки задачи")
+async def segment_image(
+    task_id: int = Path(...),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Создание фоновой задачи для сегментации аватарки задачи"""
+    
+    if not current_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Требуется аутентификация"
+        )
+        
+    task = await session.execute(select(Task).where(Task.id == task_id))
+    task = task.scalar_one_or_none()
+    
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Задача с указанным ID не найдена"
+        )
+        
+    if not task.avatar_file:
+        raise HTTPException(
+            status_code=400,
+            detail="Для этой задачи не загружен аватар"
+        )
+        
+    image_path = task.avatar_file
+    if not os.path.exists(image_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Файл аватара не найден"
+        )
+        
+    celery_task = segment_image_task.delay(task_id=task_id, image_path=image_path)
+    
+    return {"message": "Задача на сегментацию изображения успешно создана", "celery_task_id": celery_task.id}
 
+
+@app.get("/tasks/{task_id}/segment/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов сегментации аватарки задачи")
+async def get_segmentation_results(
+    task_id: int = Path(...),
+    celery_task_id: str = Path(...),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Получение результатов сегментации аватарки задачи"""
+    
+    if not current_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Требуется аутентификация"
+        )
+        
+    if not celery_task_id:
+        raise HTTPException(
+            status_code=400,
+            detail="ID задачи Celery не предоставлен"
+        )
+        
+    task = await session.execute(select(Task).where(Task.id == task_id))
+    task = task.scalar_one_or_none()
+    
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Задача с указанным ID не найдена"
+        )
+        
+    if not task.avatar_file:
+        raise HTTPException(
+            status_code=400,
+            detail="Для этой задачи не загружен аватар"
+        )
+        
+    image_path = task.avatar_file
+    if not os.path.exists(image_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Файл аватара не найден"
+        )
+        
+    celery_task = AsyncResult(celery_task_id)
+    
+    if not celery_task:
+        raise HTTPException(
+            status_code=404,
+            detail="Задача Celery с указанным ID не найдена"
+        )
+        
+    if celery_task.state == "PENDING":
+        return {"status": "PENDING", "message": "Задача еще не началась"}
+    
+    elif celery_task.state == "STARTED":
+        return {"status": "STARTED", "message": "Задача выполняется"}
+    
+    elif celery_task.state == "SUCCESS":
+        return {"status": "SUCCESS", "result_path": f"segments/{task_id}_segmentation.png"}
+    
+    elif celery_task.state == "FAILURE":
+        return {"status": "FAILURE", "message": "Задача завершилась с ошибкой"}
+    
+    
+@app.get("/tasks/{task_id}/segment/download/", status_code=status.HTTP_200_OK, description="Скачивание результатов сегментации аватарки задачи")
+async def download_segmented_image(
+    task_id: int = Path(...),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Скачивание результатов сегментации аватарки задачи"""
+    
+    if not current_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Требуется аутентификация"
+        )
+      
+    task = await session.execute(select(Task).where(Task.id == task_id))
+    task = task.scalar_one_or_none()
+    
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Задача с указанным ID не найдена"
+        )
+        
+    segmented_image_path = PathlibPath("/app/avatars/segments") / f"{task_id}_segmentation.png"
+    
+    logger.info(f"Looking for segmentation file at: {segmented_image_path}")
+    logger.info(f"File exists: {os.path.exists(segmented_image_path)}")
+    
+    if not os.path.exists(segmented_image_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Результат сегментации не найден. Убедитесь, что задача на сегментацию была успешно выполнена."
+        )
+        
+    return FileResponse(segmented_image_path, media_type="image/png", filename=f"{task_id}_segmentation.png")
+    
+    
 
 # === ЭНДПОИНТЫ АУТЕНТИФИКАЦИИ ===
 
