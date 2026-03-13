@@ -8,6 +8,11 @@ from PIL import Image
 import io
 import cv2
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 class YoloONNXService:
     """Сервис ONNX для YOLO-инференса"""
@@ -48,7 +53,7 @@ class YoloONNXService:
         return self.postprocess(outputs)
 
 
-    def postprocess(self, output: np.ndarray, conf_threshold: float = 0.25, iou_threshold: float = 0.45) -> list:
+    def postprocess(self, output: np.ndarray, conf_threshold: float = os.getenv("YOLO_CONF_THRESHOLD", 0.45), iou_threshold: float = os.getenv("YOLO_IOU_THRESHOLD", 0.01)) -> list:
         """Постпроцессинг выводов модели ONNX"""
         
         preds = np.squeeze(output).T

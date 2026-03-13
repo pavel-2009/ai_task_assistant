@@ -18,6 +18,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - SECRET_KEY=ab9bafa5578421297f7af89812af2a5c7126e2941f01c209f3ccb256b13916dc
+      - YOLO_CONF_THRESHOLD=0.25
+      - YOLO_IOU_THRESHOLD=0.45
 
     command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 

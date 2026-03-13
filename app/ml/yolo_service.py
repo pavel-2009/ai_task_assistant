@@ -30,7 +30,7 @@ class YoloService:
         """Получения предсказаний модели для изображения"""
         
         image = Image.open(io.BytesIO(image_bytes))
-        results = self.model.predict(image, save=False, verbose=False, conf=0.01)
+        results = self.model.predict(image, save=False, verbose=False, conf=0.45)
         
         dict_result = []
         
@@ -72,7 +72,7 @@ class YoloService:
     
 
 if __name__ == '__main__':
-    service = YoloService()
+    service = YoloService('D://ITWork/ai_task_assistant/runs/detect/runs/detect/task_detector_v1/weights/best.pt')
     
     onnx_path = service.export_onnx()
     
