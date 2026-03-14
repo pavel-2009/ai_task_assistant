@@ -8,10 +8,13 @@ from yolo_onnx_service import YoloONNXService
 from pathlib import Path
 import time
 
-# Путь к моделям и изображению
-PYTORCH_MODEL = "D://ITWork/ai_task_assistant/runs/detect/runs/detect/task_detector_v1/weights/best.pt"
-ONNX_MODEL = "runs/detect/runs/detect/task_detector_v1/weights/best.onnx"
-IMAGE_PATH = "app/ml/0_0.jpeg"
+# Базовая директория проекта
+BASE_DIR = Path(__file__).parent.parent.parent
+
+# Пути к моделям (относительные)
+PYTORCH_MODEL = BASE_DIR / "runs/detect/runs/detect/task_detector_v1/weights/best.pt"
+ONNX_MODEL = BASE_DIR / "runs/detect/runs/detect/task_detector_v1/weights/best.onnx"
+IMAGE_PATH = BASE_DIR / "app/ml/0_0.jpeg"
 
 # Загружаем изображение в байтах
 with open(IMAGE_PATH, "rb") as f:
