@@ -36,7 +36,7 @@ class YoloService:
         """Получения предсказаний модели для изображения"""
         
         image = Image.open(io.BytesIO(image_bytes))
-        results = self.model.predict(image, save=False, verbose=False, conf=float(os.getenv("YOLO_CONF_THRESHOLD", 0.45)))
+        results = self.model.predict(image, save=False, verbose=False, conf=float(os.getenv("YOLO_CONF_THRESHOLD", 0.35)))
         
         dict_result = []
         
