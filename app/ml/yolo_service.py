@@ -36,7 +36,7 @@ class YoloService:
         """Получения предсказаний модели для изображения"""
         
         image = Image.open(io.BytesIO(image_bytes))
-        results = self.model.predict(image, save=False, verbose=False, conf=float(os.getenv("YOLO_CONF_THRESHOLD", 0.15)))
+        results = self.model.predict(image, save=False, verbose=False, conf=float(os.getenv("YOLO_CONF_THRESHOLD", 0.45)))
         
         dict_result = []
         
@@ -78,7 +78,7 @@ class YoloService:
     
 
 if __name__ == '__main__':
-    service = YoloService('runs/detect/runs/detect/task_detector_v1/weights/best.pt')
+    service = YoloService('yolov8n.pt')
     
     onnx_path = service.export_onnx()
     

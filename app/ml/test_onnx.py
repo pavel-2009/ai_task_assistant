@@ -12,9 +12,9 @@ import time
 BASE_DIR = Path(__file__).parent.parent.parent
 
 # Пути к моделям (относительные)
-PYTORCH_MODEL = BASE_DIR / "runs/detect/runs/detect/task_detector_v1/weights/best.pt"
-ONNX_MODEL = BASE_DIR / "runs/detect/runs/detect/task_detector_v1/weights/best.onnx"
-IMAGE_PATH = BASE_DIR / "app/ml/0_0.jpeg"
+PYTORCH_MODEL = "yolov8n.pt"
+ONNX_MODEL = "./yolov8n.onnx"
+IMAGE_PATH = "0_0.jpeg"
 
 # Загружаем изображение в байтах
 with open(IMAGE_PATH, "rb") as f:

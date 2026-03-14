@@ -57,7 +57,7 @@ class YoloONNXService:
         return self.postprocess(outputs)
 
 
-    def postprocess(self, output: np.ndarray, conf_threshold: float = os.getenv("YOLO_CONF_THRESHOLD", 0.05), iou_threshold: float = os.getenv("YOLO_IOU_THRESHOLD", 0.65)) -> list:
+    def postprocess(self, output: np.ndarray, conf_threshold: float = os.getenv("YOLO_CONF_THRESHOLD", 0.45), iou_threshold: float = os.getenv("YOLO_IOU_THRESHOLD", 0.45)) -> list:
         """Постпроцессинг выводов модели ONNX"""
         
         preds = np.squeeze(output).T
