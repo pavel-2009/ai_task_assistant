@@ -42,9 +42,10 @@ def get_inference_service() -> InferenceService:
 
 def get_yolo_service() -> YoloService:
     if _models_cache["yolo"] is None:
-        if USE_ONNX:
+        if bool(USE_ONNX):
             _models_cache["yolo"] = YoloONNXService()
-        _models_cache["yolo"] = YoloService()
+        else:
+            _models_cache["yolo"] = YoloService()
     return _models_cache["yolo"]
 
 
