@@ -72,7 +72,7 @@ class YoloService:
     
 
 if __name__ == '__main__':
-    service = YoloService('D://ITWork/ai_task_assistant/runs/detect/runs/detect/task_detector_v1/weights/best.pt')
+    service = YoloService('yolov8n.pt')
     
     onnx_path = service.export_onnx()
     

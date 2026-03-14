@@ -1,10 +1,16 @@
-import time
+"""
+Скрипт для тестирования моделей на PyTorch и ONNX
+"""
+
 from yolo_service import YoloService
 from yolo_onnx_service import YoloONNXService
 
+from pathlib import Path
+import time
+
 # Путь к моделям и изображению
 PYTORCH_MODEL = "yolov8n.pt"
-ONNX_MODEL = "yolov8n.onnx"
+ONNX_MODEL = Path(__file__).parent.parent.parent / 'runs' / 'detect' / 'runs' / 'detect' / 'task_detector_v1' / 'weights' / 'best.onnx'
 IMAGE_PATH = "0_0.jpg"
 
 # Загружаем изображение в байтах
@@ -31,7 +37,7 @@ print(f"Время инференса: {py_time:.3f} сек")
 
 
 
-onnx_service = YoloONNXService(ONNX_MODEL)
+onnx_service = YoloONNXService(str(ONNX_MODEL))
 
 # Прогрев
 onnx_results = onnx_service.predict(image_bytes)

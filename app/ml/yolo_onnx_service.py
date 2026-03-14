@@ -10,14 +10,17 @@ import cv2
 
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
 load_dotenv()
+
+ONNX_WEIGHTS_PATH = 'yolov8n.onnx'
 
 
 class YoloONNXService:
     """Сервис ONNX для YOLO-инференса"""
     
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str = ONNX_WEIGHTS_PATH):
         self.session = ort.InferenceSession(
             model_path,
             providers=['CPUExecutionProvider']
@@ -63,6 +66,8 @@ class YoloONNXService:
         
         class_ids = np.argmax(scores, axis=1)
         confidences = scores[np.arange(len(scores)), class_ids]
+        
+        conf_threshold, iou_threshold = float(conf_threshold), float(iou_threshold)
         
         mask = confidences > conf_threshold
         
