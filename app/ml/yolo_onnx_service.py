@@ -15,6 +15,7 @@ from pathlib import Path
 load_dotenv()
 
 ONNX_WEIGHTS_PATH = 'yolov8n.onnx'
+VISUALIZATION_DIR = Path(__file__).parent.parent.parent / 'avatars' / 'visualizations'
 
 
 class YoloONNXService:
@@ -56,7 +57,7 @@ class YoloONNXService:
         return self.postprocess(outputs)
 
 
-    def postprocess(self, output: np.ndarray, conf_threshold: float = os.getenv("YOLO_CONF_THRESHOLD", 0.45), iou_threshold: float = os.getenv("YOLO_IOU_THRESHOLD", 0.01)) -> list:
+    def postprocess(self, output: np.ndarray, conf_threshold: float = os.getenv("YOLO_CONF_THRESHOLD", 0.05), iou_threshold: float = os.getenv("YOLO_IOU_THRESHOLD", 0.65)) -> list:
         """Постпроцессинг выводов модели ONNX"""
         
         preds = np.squeeze(output).T
@@ -99,3 +100,39 @@ class YoloONNXService:
                 })
 
         return results
+    
+    
+    def predict_and_visualize(self, image_bytes: bytes, task_id: int):
+        """Получение предсказаний и визуализация"""
+
+        VISUALIZATION_DIR.mkdir(parents=True, exist_ok=True)
+
+        img_array = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+
+        results = self.predict(image_bytes)
+
+        for det in results:
+            x1, y1, x2, y2 = map(int, det["box"])
+            conf = det["confidence"]
+            cls = det["class"]
+
+            label = f"class {cls} {conf:.2f}"
+
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            cv2.putText(
+                img,
+                label,
+                (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 0),
+                2
+            )
+
+        output_path = VISUALIZATION_DIR / f"result_{task_id}_onnx.jpg"
+
+        cv2.imwrite(str(output_path), img)
+
+        return results, output_path

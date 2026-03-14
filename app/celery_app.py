@@ -8,10 +8,15 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 from pathlib import Path
+from dotenv import load_dotenv
 
 from app.ml.inference_service import InferenceService
 from app.ml.yolo_service import YoloService
 from app.ml.segmentation_service import SegmentationService
+from app.ml.yolo_onnx_service import YoloONNXService
+
+
+load_dotenv()
 
 
 # Кэш для моделей и executor для асинхронной загрузки
@@ -26,6 +31,8 @@ CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0
 INFERENCE_CHECKPOINT_PATH = Path(__file__).parent.parent /  "checkpoints" / "model.pth"
 INFERENCE_IDX_TO_CLASS = {0: "cat", 1: "dog", 2: "house"}
 
+USE_ONNX = os.getenv("USE_ONNX", False)
+
 
 def get_inference_service() -> InferenceService:
     if _models_cache["inference"] is None:
@@ -35,6 +42,8 @@ def get_inference_service() -> InferenceService:
 
 def get_yolo_service() -> YoloService:
     if _models_cache["yolo"] is None:
+        if USE_ONNX:
+            _models_cache["yolo"] = YoloONNXService()
         _models_cache["yolo"] = YoloService()
     return _models_cache["yolo"]
 

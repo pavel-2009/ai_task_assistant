@@ -6,14 +6,20 @@ from ultralytics import YOLO
 from PIL import Image
 import io
 
+import os
+from dotenv import load_dotenv
+
 from pathlib import Path
+
+
+load_dotenv()
 
 
 MODEL_PATH = 'yolov8n.pt'
 VISUALIZATION_DIR = Path(__file__).parent.parent.parent / 'avatars' / 'visualizations'
 VISUALIZATION_DIR.mkdir(parents=True, exist_ok=True)
 
-EXPORT_DIR = Path(__file__).parent.parent.parent / "checkpoints" / "onnx"
+EXPORT_DIR = Path(__file__).parent.parent.parent / "checkpoints"
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -30,7 +36,7 @@ class YoloService:
         """Получения предсказаний модели для изображения"""
         
         image = Image.open(io.BytesIO(image_bytes))
-        results = self.model.predict(image, save=False, verbose=False, conf=0.45)
+        results = self.model.predict(image, save=False, verbose=False, conf=float(os.getenv("YOLO_CONF_THRESHOLD", 0.15)))
         
         dict_result = []
         
@@ -63,16 +69,16 @@ class YoloService:
             imgsz=640,
             dynamic=False,
             half=False,
-            verbose=False,
-            project=str(EXPORT_DIR),
-            name="yolov8n_onnx"
+            simplify=True,
+            opset=12,
+            project="checkpoints/onnx",
+            name="best_onnx"
         )
-        
         return onnx_path
     
 
 if __name__ == '__main__':
-    service = YoloService('yolov8n.pt')
+    service = YoloService('runs/detect/runs/detect/task_detector_v1/weights/best.pt')
     
     onnx_path = service.export_onnx()
     

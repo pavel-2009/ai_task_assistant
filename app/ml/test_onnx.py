@@ -9,9 +9,9 @@ from pathlib import Path
 import time
 
 # Путь к моделям и изображению
-PYTORCH_MODEL = "yolov8n.pt"
-ONNX_MODEL = Path(__file__).parent.parent.parent / 'runs' / 'detect' / 'runs' / 'detect' / 'task_detector_v1' / 'weights' / 'best.onnx'
-IMAGE_PATH = "0_0.jpg"
+PYTORCH_MODEL = "D://ITWork/ai_task_assistant/runs/detect/runs/detect/task_detector_v1/weights/best.pt"
+ONNX_MODEL = "runs/detect/runs/detect/task_detector_v1/weights/best.onnx"
+IMAGE_PATH = "app/ml/0_0.jpeg"
 
 # Загружаем изображение в байтах
 with open(IMAGE_PATH, "rb") as f:
@@ -27,7 +27,7 @@ py_results, _  = yolo_service.predict_and_visualize(image_bytes, task_id=0)
 start = time.time()
 
 
-for _ in range(100 - 1):
+for _ in range(10 - 1):
     py_results, _ = yolo_service.predict_and_visualize(image_bytes, task_id=0)
 py_time = time.time() - start
 
@@ -40,12 +40,12 @@ print(f"Время инференса: {py_time:.3f} сек")
 onnx_service = YoloONNXService(str(ONNX_MODEL))
 
 # Прогрев
-onnx_results = onnx_service.predict(image_bytes)
+onnx_results = onnx_service.predict_and_visualize(image_bytes, 0)
 
 start = time.time()
 
 
-for _ in range(100 - 1):
+for _ in range(10 - 1):
     onnx_results = onnx_service.predict(image_bytes)
 onnx_time = time.time() - start
 

@@ -15,11 +15,8 @@ services:
       - ./test.db:/app/test.db
       - torch_cache:/root/.cache/torch
 
-    environment:
-      - PYTHONUNBUFFERED=1
-      - SECRET_KEY=ab9bafa5578421297f7af89812af2a5c7126e2941f01c209f3ccb256b13916dc
-      - YOLO_CONF_THRESHOLD=0.25
-      - YOLO_IOU_THRESHOLD=0.45
+    env_file:
+      - .env
 
     command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
@@ -34,11 +31,8 @@ services:
     container_name: ai_task_assistant_celery
     depends_on:
       - redis
-    environment:
-      - PYTHONUNBUFFERED=1
-      - SECRET_KEY=ab9bafa5578421297f7af89812af2a5c7126e2941f01c209f3ccb256b13916dc
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    env_file:
+      - .env
     command: celery -A app.ml.tasks worker --loglevel=info
     volumes:
       - ./avatars:/app/avatars
