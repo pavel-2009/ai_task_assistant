@@ -4,8 +4,6 @@ ONNX-сервис для YOLOv8 с возвратом имени класса
 
 import onnxruntime as ort
 import numpy as np
-from PIL import Image
-import io
 import cv2
 from pathlib import Path
 import os
@@ -80,7 +78,7 @@ class YoloONNXService:
         img, scale, pad_x, pad_y = self.letterbox(img)
         
         img = img.astype(np.float32) / 255.0
-        img = np.transpose(img, (2, 0, 1))  # HWC -> CHW
+        img = img.transpose(2,0,1).copy()  # HWC -> CHW
         
         input_tensor = np.expand_dims(img, axis=0)  # (1, 3, 640, 640)
         return input_tensor, scale, pad_x, pad_y, orig_shape
