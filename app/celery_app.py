@@ -31,7 +31,7 @@ CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0
 INFERENCE_CHECKPOINT_PATH = Path(__file__).parent.parent /  "checkpoints" / "model.pth"
 INFERENCE_IDX_TO_CLASS = {0: "cat", 1: "dog", 2: "house"}
 
-USE_ONNX = os.getenv("USE_ONNX", False)
+USE_ONNX = os.getenv("USE_ONNX", "False").lower() in ("true", "1", "t")
 
 
 def get_inference_service() -> InferenceService:
@@ -42,7 +42,7 @@ def get_inference_service() -> InferenceService:
 
 def get_yolo_service() -> YoloService:
     if _models_cache["yolo"] is None:
-        if bool(USE_ONNX):
+        if USE_ONNX:
             _models_cache["yolo"] = YoloONNXService()
         else:
             _models_cache["yolo"] = YoloService()
@@ -84,4 +84,5 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    worker_prefetch_multiplier=1,
 )
