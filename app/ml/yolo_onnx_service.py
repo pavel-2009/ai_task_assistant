@@ -30,34 +30,61 @@ COCO_CLASSES = [
     'clock','vase','scissors','teddy bear','hair drier','toothbrush'
 ]
 
+sess_options = ort.SessionOptions()
+
+sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+sess_options.intra_op_num_threads = os.cpu_count()
+sess_options.inter_op_num_threads = 1
+
 class YoloONNXService:
     """ONNX-сервис для инференса YOLOv8 с возвратом имени класса"""
 
     def __init__(self, model_path: str = ONNX_WEIGHTS_PATH):
-        self.session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+        self.session = ort.InferenceSession(
+            model_path,
+            sess_options=sess_options,
+            providers=['CPUExecutionProvider']
+        )
         self.input_name = self.session.get_inputs()[0].name
 
-    def letterbox(self, image: np.ndarray, new_size=640):
-        """Letterbox resize с сохранением пропорций"""
+
+    def letterbox(self, image: np.ndarray, new_size=640) -> tuple[np.ndarray, float, int, int]:
+        """Letterbox масштабирование с сохранением пропорций"""
+        
         h, w = image.shape[:2]
+        
         scale = min(new_size / w, new_size / h)
+        
         nw, nh = int(w * scale), int(h * scale)
         resized = cv2.resize(image, (nw, nh))
+        
         canvas = np.full((new_size, new_size, 3), 114, dtype=np.uint8)
+        
         top = (new_size - nh) // 2
         left = (new_size - nw) // 2
+        
         canvas[top:top+nh, left:left+nw] = resized
+        
         return canvas, scale, left, top
 
-    def preprocess(self, image_bytes: bytes):
+
+    def preprocess(self, image_bytes: bytes) -> tuple[np.ndarray, float, int, int, tuple[int, int]]:
         """Преобразование изображения для модели"""
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        img_np = np.array(image)  # PIL → NumPy
-        img, scale, pad_x, pad_y = self.letterbox(img_np)
+        
+        img_array = np.frombuffer(image_bytes, np.uint8)
+        
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
+        orig_shape = img.shape[:2]
+        img, scale, pad_x, pad_y = self.letterbox(img)
+        
         img = img.astype(np.float32) / 255.0
-        img = img.transpose(2, 0, 1)
-        img = np.expand_dims(img, 0)
-        return img, scale, pad_x, pad_y, img_np.shape[:2]
+        img = np.transpose(img, (2, 0, 1))  # HWC -> CHW
+        
+        input_tensor = np.expand_dims(img, axis=0)  # (1, 3, 640, 640)
+        return input_tensor, scale, pad_x, pad_y, orig_shape
+    
 
     def postprocess(self, output: list[np.ndarray], scale: float, pad_x: int, pad_y: int, orig_shape: tuple[int, int], conf_threshold: float = 0.45, iou_threshold: float = 0.55):
         """Постпроцессинг выводов ONNX"""
@@ -68,9 +95,9 @@ class YoloONNXService:
         boxes = preds[:, :4]  # x_center, y_center, w, h (canvas 640)
         class_scores = preds[:, 4:]
 
-        # 🔹 Без сигмоида, просто выбираем максимальный класс
+        # Получаем классы и уверенности
         class_ids = np.argmax(class_scores, axis=1)
-        confidences = np.max(class_scores, axis=1)
+        confidences = class_scores[np.arange(len(class_scores)), class_ids]
 
         mask = confidences > conf_threshold
         if not np.any(mask):
@@ -81,59 +108,92 @@ class YoloONNXService:
         class_ids = class_ids[mask]
 
         # Конвертация в [x1, y1, x2, y2] + обратное масштабирование
-        x_c = (boxes[:,0] - pad_x) / scale
-        y_c = (boxes[:,1] - pad_y) / scale
-        w = boxes[:,2] / scale
-        h = boxes[:,3] / scale
-
+        x_c, y_c, w, h = boxes.T
+        
         x1 = x_c - w/2
         y1 = y_c - h/2
         x2 = x_c + w/2
         y2 = y_c + h/2
-
-        boxes_xyxy = np.stack([x1, y1, x2, y2], axis=1)
-
-        # NMS
-        boxes_xywh = boxes_xyxy.copy()
-        boxes_xywh[:,2] = boxes_xyxy[:,2] - boxes_xyxy[:,0]
-        boxes_xywh[:,3] = boxes_xyxy[:,3] - boxes_xyxy[:,1]
-
-        indices = cv2.dnn.NMSBoxes(boxes_xywh.tolist(), confidences.tolist(), conf_threshold, iou_threshold)
+        
+        boxes = np.stack([x1, y1, x2, y2], axis=1)
+        
+        boxes[:, [0, 2]] -= pad_x
+        boxes[:, [1, 3]] -= pad_y
+        
+        boxes /= scale
+        
+        indices = cv2.dnn.NMSBoxes(
+            boxes,
+            confidences,
+            conf_threshold,
+            iou_threshold
+        )
 
         results = []
         if len(indices) > 0:
             for i in indices.flatten():
-                x1, y1, w, h = boxes_xywh[i]
+                
+                x1, y1, x2, y2 = boxes[i]
+                
                 class_id = int(class_ids[i])
+                
                 results.append({
                     "class_name": COCO_CLASSES[class_id],
                     "confidence": float(confidences[i]),
-                    "box": [float(x1), float(y1), float(x1+w), float(y1+h)]
+                    "box": [float(x1), float(y1), float(x2), float(y2)]
                 })
+                
         return results
 
-    def predict(self, image_bytes: bytes):
+
+    def predict(self, image_bytes: bytes) -> list[dict]:
+        """Предсказание с постпроцессингом"""
+        
         input_tensor, scale, pad_x, pad_y, orig_shape = self.preprocess(image_bytes)
+        
         output = self.session.run(None, {self.input_name: input_tensor})
+        
         results = self.postprocess(
             output, scale, pad_x, pad_y, orig_shape,
             conf_threshold=float(os.getenv("YOLO_CONF_THRESHOLD", 0.35)),
             iou_threshold=float(os.getenv("YOLO_IOU_THRESHOLD", 0.55))
         )
+        
         return results
+    
+    
+    def predict_without_postprocess(self, image_bytes: bytes) -> list[np.ndarray]:
+        """Предсказание без постпроцессинга (сырые данные)"""
+        
+        input_tensor, _, _, _, _ = self.preprocess(image_bytes)
+        
+        output = self.session.run(None, {self.input_name: input_tensor})
+        
+        return output
 
-    def predict_and_visualize(self, image_bytes: bytes, task_id: int):
+
+    def predict_and_visualize(self, image_bytes: bytes, task_id: int) -> tuple[list[dict], Path]:
+        """Предсказание с визуализацией результатов"""
+        
         VISUALIZATION_DIR.mkdir(parents=True, exist_ok=True)
+        
         img_array = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        
         results = self.predict(image_bytes)
+        
         for det in results:
+            
             x1, y1, x2, y2 = map(int, det["box"])
+            
             cls_name = det["class_name"]
             conf = det["confidence"]
             label = f"{cls_name} {conf:.2f}"
+            
             cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
             cv2.putText(img, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
+            
         output_path = VISUALIZATION_DIR / f"result_{task_id}_onnx.jpg"
         cv2.imwrite(str(output_path), img)
+        
         return results, output_path
