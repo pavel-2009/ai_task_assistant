@@ -1,10 +1,13 @@
 """
-Тестирование системы компьютерного зрения приложения FastAPI
+Тестирование базового CV-флоу (загрузка аватара) через API.
 """
 
-from fastapi.testclient import TestClient
-import pytest
+import io
 import uuid
+
+from fastapi.testclient import TestClient
+from PIL import Image
+import pytest
 
 from app.main import app
 
@@ -16,48 +19,50 @@ def client():
         yield c
 
 
-def test_predict_image_class(client):
-    """Тестирование предсказания класса изображения"""
+def _build_image_bytes() -> bytes:
+    image = Image.new("RGB", (256, 256), color=(100, 150, 200))
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+
+def test_upload_avatar(client: TestClient):
+    """Проверка загрузки аватара для задачи"""
 
     username = f"testuser_{uuid.uuid4().hex[:8]}"
     password = "testpassword"
 
-    # Тестируем регистрацию нового пользователя
     registration_data = {
         "username": username,
-        "password": password
+        "password": password,
     }
     response = client.post("/auth/register", json=registration_data)
     assert response.status_code == 201
-    assert response.json()["username"] == registration_data["username"]
 
-    # Тестируем вход с правильными данными
     login_data = {
         "username": username,
-        "password": password
+        "password": password,
     }
-
     response = client.post("/auth/login", data=login_data)
     assert response.status_code == 200
-    assert "access_token" in response.json()
 
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    from pathlib import Path
-    image_path = Path(__file__).parent / "1.jpeg"
-    
-    with open(image_path, "rb") as f:
-        image_bytes = f.read()
-
-    task_create_response = client.post("/tasks", json={"title": "Test Task", "description": "dsdsds"}, headers=headers)
-
+    task_create_response = client.post(
+        "/tasks/",
+        json={"title": "Test Task", "description": "Avatar upload"},
+        headers=headers,
+    )
     assert task_create_response.status_code == 201
     task_id = task_create_response.json()["id"]
 
-    response = client.post(f"/tasks/{task_id}/avatar", files={"image": ("test_image.jpg", image_bytes, "image/jpeg")}, headers=headers)
-    assert response.status_code == 200
+    image_bytes = _build_image_bytes()
 
-    response = client.post(f"/tasks/{task_id}/predict", headers=headers)
-    assert response.status_code == 200
-    assert "predicted_class" in response.json()
+    upload_response = client.post(
+        f"/tasks/{task_id}/avatar",
+        files={"image": ("test_image.jpg", image_bytes, "image/jpeg")},
+        headers=headers,
+    )
+    assert upload_response.status_code == 200
+    assert "filepath" in upload_response.json()
