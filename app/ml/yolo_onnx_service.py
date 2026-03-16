@@ -114,7 +114,7 @@ class YoloONNXService:
         canvas[pad_top:pad_top+new_h, pad_left:pad_left+new_w] = resized
         
         # Нормализация и transpose за один проход
-        canvas = canvas / 255.0
+        canvas = canvas.astype(np.float32) / 255.0
         
         # HWC -> CHW с добавлением batch dimension
         input_tensor = np.expand_dims(canvas.transpose(2, 0, 1), axis=0)

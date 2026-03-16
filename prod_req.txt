@@ -5,8 +5,8 @@ torch==2.10.0
 torchaudio==2.10.0
 torchvision==0.25.0
 
-onnx
-onnxruntime
+onnx==1.20.1
+onnxruntime==1.24.3
 
 # === FastAPI & Web ===
 fastapi==0.132.0
@@ -41,3 +41,4 @@ pydantic==2.12.5
 pydantic-settings==2.13.1
 python-dotenv==1.2.1
 
+py-cpuinfo==9.0.0
