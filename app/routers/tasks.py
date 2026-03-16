@@ -117,7 +117,8 @@ async def update_task(
     return TaskGet(
         id=task.id,
         title=update_dict.get("title", task.title),
-        description=update_dict.get("description", task.description)
+        description=update_dict.get("description", task.description),
+        author_id=task.author_id
     )
 
 

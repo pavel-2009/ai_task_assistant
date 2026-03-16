@@ -25,7 +25,7 @@ router = APIRouter(
 )
 
 
-@router.post("/tasks/{task_id}/avatar", status_code=status.HTTP_200_OK, description="Загрузка аватара для задачи")
+@router.post("/{task_id}/avatar", status_code=status.HTTP_200_OK, description="Загрузка аватара для задачи")
 async def upload_avatar(
     task_id: int = Path(...),
     image: UploadFile = None,
@@ -83,7 +83,7 @@ async def upload_avatar(
     return {"filepath": f"avatars/{filename}", "filename": filename}
 
 
-@router.post("/tasks/{task_id}/predict/submit", status_code=status.HTTP_202_ACCEPTED, description="Создание задачи на предсказание класса аватарки задачи")
+@router.post("/{task_id}/predict/submit", status_code=status.HTTP_202_ACCEPTED, description="Создание задачи на предсказание класса аватарки задачи")
 async def predict_img_class_submit(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
@@ -132,7 +132,7 @@ async def predict_img_class_submit(
         )
         
         
-@router.get("/tasks/{task_id}/predict/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов предсказания класса аватарки задачи")
+@router.get("/{task_id}/predict/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов предсказания класса аватарки задачи")
 async def get_predict_class_results(
     task_id: int = Path(...),
     celery_task_id: str = Path(...),
@@ -190,7 +190,7 @@ async def get_predict_class_results(
         return {"status": "FAILURE", "message": "Задача завершилась с ошибкой"}
         
         
-@router.post("/tasks/{task_id}/detect/submit", status_code=status.HTTP_202_ACCEPTED, description="Детекция объектов на аватарке задачи")
+@router.post("/{task_id}/detect/submit", status_code=status.HTTP_202_ACCEPTED, description="Детекция объектов на аватарке задачи")
 async def detect_objects(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
@@ -231,7 +231,7 @@ async def detect_objects(
     return {"message": "Задача на детекцию объектов успешно создана", "celery_task_id": celery_task.id}
 
 
-@router.post("/tasks/{task_id}/detect/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов детекции объектов на аватарке задачи")
+@router.post("/{task_id}/detect/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов детекции объектов на аватарке задачи")
 async def get_detection_results(
     task_id: int = Path(...),
     celery_task_id: str = Path(...),
@@ -292,7 +292,7 @@ async def get_detection_results(
         return {"status": celery_task.state, "message": "Задача в неизвестном состоянии"}
     
     
-@router.post("/tasks/{task_id}/segment/submit", status_code=status.HTTP_202_ACCEPTED, description="Сегментация аватарки задачи")
+@router.post("/{task_id}/segment/submit", status_code=status.HTTP_202_ACCEPTED, description="Сегментация аватарки задачи")
 async def segment_image(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
@@ -333,7 +333,7 @@ async def segment_image(
     return {"message": "Задача на сегментацию изображения успешно создана", "celery_task_id": celery_task.id}
 
 
-@router.get("/tasks/{task_id}/segment/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов сегментации аватарки задачи")
+@router.get("/{task_id}/segment/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов сегментации аватарки задачи")
 async def get_segmentation_results(
     task_id: int = Path(...),
     celery_task_id: str = Path(...),
@@ -397,7 +397,7 @@ async def get_segmentation_results(
         return {"status": "FAILURE", "message": "Задача завершилась с ошибкой"}
     
     
-@router.get("/tasks/{task_id}/segment/download/", status_code=status.HTTP_200_OK, description="Скачивание результатов сегментации аватарки задачи")
+@router.get("/{task_id}/segment/download/", status_code=status.HTTP_200_OK, description="Скачивание результатов сегментации аватарки задачи")
 async def download_segmented_image(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
