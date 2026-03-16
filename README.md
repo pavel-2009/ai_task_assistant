@@ -125,21 +125,6 @@ celery -A app.ml.tasks worker --loglevel=info
 pytest -q
 ```
 
-Отдельно:
-
-- Прямые тесты ML-сервисов (без API):
-
-```bash
-pytest -q tests/models/test_model_services.py
-```
-
-- Ручные smoke/benchmark скрипты:
-
-```bash
-python tests/manual/ws_smoke.py
-python tests/manual/yolo_onnx_benchmark.py
-```
-
 Если тесты не стартуют на чистом окружении, обычно причина — отсутствующие зависимости (например, `fastapi`, `numpy`, `ultralytics`, `websockets`) или неподнятые инфраструктурные сервисы.
 
 ---
