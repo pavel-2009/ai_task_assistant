@@ -5,6 +5,8 @@
 from ultralytics import YOLO
 from PIL import Image
 import io
+import numpy as np
+import cv2
 
 import os
 from dotenv import load_dotenv
@@ -35,7 +37,9 @@ class YoloService:
     def predict_and_visualize(self, image_bytes: bytes, task_id: int) -> list[dict]:
         """Получения предсказаний модели для изображения"""
         
-        image = Image.open(io.BytesIO(image_bytes))
+        img_arr = np.frombuffer(image_bytes, dtype=np.uint8)
+        image = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
+        
         results = self.model.predict(image, save=False, verbose=False, conf=float(os.getenv("YOLO_CONF_THRESHOLD", 0.35)))
         
         dict_result = []
@@ -59,6 +63,33 @@ class YoloService:
         Image.fromarray(im).save(VISUALIZATION_DIR / f'result_{task_id}.jpg')
                 
         return dict_result, VISUALIZATION_DIR / f'result_{task_id}.jpg'
+    
+    
+    def predict(self, image_bytes: bytes) -> list[dict]:
+        """Предсказания модели для изображения без сохранения визуализации"""
+        
+        img_arr = np.frombuffer(image_bytes, dtype=np.uint8)
+        
+        image = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
+        results = self.model.predict(image, save=False, verbose=False, conf=float(os.getenv("YOLO_CONF_THRESHOLD", 0.35)))
+        
+        dict_result = []
+        
+        for result in results:
+            boxes = result.boxes.xyxy
+            classes = result.boxes.cls
+            confidence = result.boxes.conf
+            
+            
+            for box, cls, conf in zip(boxes, classes, confidence):
+                dict_result.append({
+                    'class': int(cls),
+                    'class_name': self.model.names[int(cls)],
+                    'confidence': float(conf),
+                    'box': [float(coord) for coord in box]
+                })
+                
+        return dict_result
     
     
     def export_onnx(self):

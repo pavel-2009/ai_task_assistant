@@ -38,7 +38,7 @@ BASE_DIR = Path(__file__).parent
 # Пути к моделям
 PYTORCH_MODEL = BASE_DIR / "yolov8n.pt"
 ONNX_MODEL = BASE_DIR / "yolov8n.onnx"
-IMAGE_PATH = BASE_DIR / "0_0.jpeg"
+IMAGE_PATH = BASE_DIR / "0_0.jpg"
 
 # Загружаем изображение в байтах
 with open(IMAGE_PATH, "rb") as f:

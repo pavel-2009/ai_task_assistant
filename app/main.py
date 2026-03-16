@@ -32,11 +32,12 @@ app = FastAPI(lifespan=lifespan)
 
 
 # Подключение роутеров
-from .routers import auth, tasks, avatars
+from .routers import auth, tasks, avatars, streaming
 
 app.include_router(auth.router)
 app.include_router(tasks.router)
 app.include_router(avatars.router)
+app.include_router(streaming.router)
 
 
 # === ЭНДПОИНТ ПРОВЕРКИ ЗДОРОВЬЯ ===
