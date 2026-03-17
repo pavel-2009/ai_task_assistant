@@ -4,7 +4,6 @@
 
 from fastapi import APIRouter, WebSocket
 from fastapi.websockets import WebSocketDisconnect
-from concurrent.futures import ThreadPoolExecutor
 
 import asyncio
 

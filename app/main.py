@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing EmbeddingService...")
         embedding_service = EmbeddingService()
         app.state.embedding_service = embedding_service
+        app.state.embedding_service.encode("Test embedding to warm up the model")  # Прогрев модели
         logger.info("EmbeddingService initialized successfully")
         
         print("App started")
