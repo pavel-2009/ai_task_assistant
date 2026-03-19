@@ -9,9 +9,9 @@ from torchvision import transforms
 
 from typing import Tuple
 
-from config import config
-from datasets import TaskImageDataset
-from models_nn import SimpleCNN, get_pretrained_model
+from ...common.config import config
+from .datasets import TaskImageDataset
+from .models_nn import SimpleCNN, get_pretrained_model
 
 
 OUTPUT_DIR = config.output_dir
