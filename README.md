@@ -48,8 +48,12 @@ app/
     avatars.py           # эндпоинты аватаров + CV флоу
     streaming.py         # /ws/detect
   ml/
-    tasks.py             # Celery задачи ML
-    *_service.py         # сервисы инференса
+    common/              # общая ML-конфигурация
+    cv/                  # CV-подпакет
+      classification/    # классификация изображений
+      detection/         # детекция объектов и YOLO-веса
+      segmentation/      # сегментация изображений
+    nlp/                 # NLP-сервисы и векторный поиск
 
 alembic/                 # Конфигурация миграций
 tests/                   # Автотесты
@@ -100,7 +104,7 @@ uvicorn app.main:app --reload
 Для фоновых задач отдельно поднимите Redis и Celery worker:
 
 ```bash
-celery -A app.ml.tasks worker --loglevel=info
+celery -A app.ml.cv.tasks worker --loglevel=info
 ```
 
 ---

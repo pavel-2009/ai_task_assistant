@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, Body, status
 
 import asyncio
 
-from ..ml.embedding_service import EmbeddingService
+from ..ml.nlp.embedding_service import EmbeddingService
 
 
 router = APIRouter(
