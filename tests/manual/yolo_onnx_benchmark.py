@@ -9,8 +9,8 @@ import time
 
 from PIL import Image
 
-from app.ml.yolo_service import YoloService
-from app.ml.yolo_onnx_service import YoloONNXService
+from app.ml.cv.detection.yolo_service import YoloService
+from app.ml.cv.detection.yolo_onnx_service import YoloONNXService
 
 
 def iou(box1: list[float], box2: list[float]) -> float:
@@ -38,7 +38,7 @@ def _build_test_image_bytes() -> bytes:
 
 
 def main() -> None:
-    base_dir = Path("app/ml")
+    base_dir = Path("app/ml/cv/detection")
     pytorch_model = base_dir / "yolov8n.pt"
     onnx_model = base_dir / "yolov8n.onnx"
 
