@@ -6,7 +6,7 @@ from torch import nn
 import torch
 from torchvision import models
 
-from .config import config
+from ...common.config import config
 
 
 class SimpleCNN(nn.Module):

@@ -11,7 +11,7 @@ from pathlib import Path
 import io
 
 from .models_nn import get_pretrained_model
-from .config import config
+from ...common.config import config
 
 
 class InferenceService:

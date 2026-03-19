@@ -10,10 +10,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from dotenv import load_dotenv
 
-from app.ml.inference_service import InferenceService
-from app.ml.yolo_service import YoloService
-from app.ml.segmentation_service import SegmentationService
-from app.ml.yolo_onnx_service import YoloONNXService
+from app.ml.cv.classification.inference_service import InferenceService
+from app.ml.cv.detection.yolo_service import YoloService
+from app.ml.cv.segmentation.segmentation_service import SegmentationService
+from app.ml.cv.detection.yolo_onnx_service import YoloONNXService
 
 
 load_dotenv()
@@ -73,7 +73,7 @@ celery_app = Celery(
     "ai_task_assistant",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
-    include=["app.ml.tasks"]
+    include=["app.ml.cv.tasks"]
 )
 
 celery_app.conf.update(
