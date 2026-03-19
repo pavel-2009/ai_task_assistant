@@ -11,7 +11,7 @@ def train_yolo():
     
     print("Начинаем обучение модели YOLO...")
     
-    model = ultralytics.YOLO('yolov8n.pt')
+    model = ultralytics.YOLO(Path(__file__).with_name('yolov8n.pt'))
     
     data_yaml_path = Path(__file__).parent.parent.parent / "data" / "data.yaml"
     
