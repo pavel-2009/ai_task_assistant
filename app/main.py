@@ -9,6 +9,8 @@ import logging
 
 from app.celery_app import preload_models
 from app.ml.embedding_service import EmbeddingService
+from app.ml.semantic_search_service import SemanticSearchService
+from app.ml.vector_db import VectorDB
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +26,21 @@ async def lifespan(app: FastAPI):
         await preload_models()
         logger.info("Models preloaded successfully")
         
+        logger.info("Loading FAISS database...")
+        vector_db = VectorDB(dim=384)  # Инициализируем базу данных с размерностью эмбеддингов модели
+        app.state.vector_db = vector_db
+        logger.info("FAISS database loaded successfully")
+        
         logger.info("Initializing EmbeddingService...")
         embedding_service = EmbeddingService()
         app.state.embedding_service = embedding_service
         app.state.embedding_service.encode("Test embedding to warm up the model")  # Прогрев модели
         logger.info("EmbeddingService initialized successfully")
+        
+        logger.info("Loading SemanticSearchService...")
+        semantic_search_service = SemanticSearchService(embedding_service)
+        app.state.semantic_search_service = semantic_search_service
+        logger.info("SemanticSearchService loaded successfully")
         
         print("App started")
         
