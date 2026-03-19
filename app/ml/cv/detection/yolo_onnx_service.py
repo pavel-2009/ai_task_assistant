@@ -16,7 +16,7 @@ import time
 
 load_dotenv()
 
-ONNX_WEIGHTS_PATH = Path(__file__).parent / "yolov8n.onnx"
+ONNX_WEIGHTS_PATH = Path(__file__).with_name("yolov8n.onnx")
 VISUALIZATION_DIR = Path(__file__).parent.parent.parent / 'avatars' / 'visualizations'
 
 # COCO class names

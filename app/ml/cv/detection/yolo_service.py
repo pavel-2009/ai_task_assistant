@@ -17,7 +17,7 @@ from pathlib import Path
 load_dotenv()
 
 
-MODEL_PATH = 'yolov8n.pt'
+MODEL_PATH = Path(__file__).with_name('yolov8n.pt')
 VISUALIZATION_DIR = Path(__file__).parent.parent.parent / 'avatars' / 'visualizations'
 VISUALIZATION_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -109,7 +109,7 @@ class YoloService:
     
 
 if __name__ == '__main__':
-    service = YoloService('yolov8n.pt')
+    service = YoloService(MODEL_PATH)
     
     onnx_path = service.export_onnx()
     
