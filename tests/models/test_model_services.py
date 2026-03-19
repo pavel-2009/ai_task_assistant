@@ -28,7 +28,7 @@ def _build_image_bytes() -> bytes:
 def test_inference_service_predict_raw():
     pytest.importorskip("torch")
     pytest.importorskip("torchvision")
-    from app.ml.inference_service import InferenceService
+    from app.ml.cv.classification.inference_service import InferenceService
 
     checkpoint_path = Path("checkpoints/model.pth")
     if not checkpoint_path.exists():
@@ -55,11 +55,11 @@ def test_yolo_service_predict_raw():
     pytest.importorskip("ultralytics")
     pytest.importorskip("cv2")
 
-    from app.ml.yolo_service import YoloService
+    from app.ml.cv.detection.yolo_service import YoloService
 
-    model_path = Path("app/ml/yolov8n.pt")
+    model_path = Path("app/ml/cv/detection/yolov8n.pt")
     if not model_path.exists():
-        pytest.skip("YOLO weights app/ml/yolov8n.pt not found")
+        pytest.skip("YOLO weights app/ml/cv/detection/yolov8n.pt not found")
 
     service = YoloService(str(model_path))
     result = service.predict(_build_image_bytes())
@@ -77,11 +77,11 @@ def test_yolo_onnx_service_predict_raw():
     pytest.importorskip("onnxruntime")
     pytest.importorskip("cv2")
 
-    from app.ml.yolo_onnx_service import YoloONNXService
+    from app.ml.cv.detection.yolo_onnx_service import YoloONNXService
 
-    model_path = Path("app/ml/yolov8n.onnx")
+    model_path = Path("app/ml/cv/detection/yolov8n.onnx")
     if not model_path.exists():
-        pytest.skip("ONNX weights app/ml/yolov8n.onnx not found")
+        pytest.skip("ONNX weights app/ml/cv/detection/yolov8n.onnx not found")
 
     service = YoloONNXService(str(model_path))
     result = service.predict(_build_image_bytes())
@@ -100,7 +100,7 @@ def test_segmentation_service_predict_raw():
     pytest.importorskip("torchvision")
     pytest.importorskip("cv2")
 
-    from app.ml.segmentation_service import SegmentationService
+    from app.ml.cv.segmentation.segmentation_service import SegmentationService
 
     service = SegmentationService()
     result = service.segment_image(_build_image_bytes())

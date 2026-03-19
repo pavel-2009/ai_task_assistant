@@ -8,9 +8,9 @@ from contextlib import asynccontextmanager
 import logging
 
 from app.celery_app import preload_models
-from app.ml.embedding_service import EmbeddingService
-from app.ml.semantic_search_service import SemanticSearchService
-from app.ml.vector_db import VectorDB
+from app.ml.nlp.embedding_service import EmbeddingService
+from app.ml.nlp.semantic_search_service import SemanticSearchService
+from app.ml.nlp.vector_db import VectorDB
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing EmbeddingService...")
         embedding_service = EmbeddingService()
         app.state.embedding_service = embedding_service
-        app.state.embedding_service.encode("Test embedding to warm up the model")  # Прогрев модели
+        app.state.embedding_service.encode_one("Test embedding to warm up the model")  # Прогрев модели
         logger.info("EmbeddingService initialized successfully")
         
         logger.info("Loading SemanticSearchService...")
