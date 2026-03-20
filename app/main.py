@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 import logging
 
 from app.celery_app import preload_models
+from app.db import close_redis, get_redis
 from app.ml.nlp.embedding_service import EmbeddingService
 from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.vector_db import VectorDB
@@ -26,8 +27,12 @@ async def lifespan(app: FastAPI):
         await preload_models()
         logger.info("Models preloaded successfully")
         
+        logger.info("Connecting Redis for NLP services...")
+        redis_client = get_redis()
+        app.state.redis_client = redis_client
+
         logger.info("Loading FAISS database...")
-        vector_db = VectorDB(dim=384)  # Инициализируем базу данных с размерностью эмбеддингов модели
+        vector_db = VectorDB(dim=384, redis_client=redis_client)  # Инициализируем базу данных с размерностью эмбеддингов модели
         app.state.vector_db = vector_db
         logger.info("FAISS database loaded successfully")
         
@@ -38,7 +43,7 @@ async def lifespan(app: FastAPI):
         logger.info("EmbeddingService initialized successfully")
         
         logger.info("Loading SemanticSearchService...")
-        semantic_search_service = SemanticSearchService(app.state.embedding_service, app.state.vector_db)
+        semantic_search_service = SemanticSearchService(app.state.embedding_service, app.state.vector_db, redis_client=redis_client)
         app.state.semantic_search_service = semantic_search_service
         logger.info("SemanticSearchService loaded successfully")
         
@@ -49,8 +54,9 @@ async def lifespan(app: FastAPI):
         print(f"Error: {e}")
      
     yield
-            
+
     # === SHUTDOWN ===
+    close_redis()
             
 
 # Создание приложения
