@@ -4,12 +4,17 @@
 
 from __future__ import annotations
 
-import pickle
 from uuid import uuid4
+import pickle
 
 import faiss
 import numpy as np
 from redis import Redis
+
+from sqlalchemy import select, insert
+
+from ....app.db import get_async_session
+from ....app.models import Text
 
 
 class VectorDB:
@@ -22,13 +27,15 @@ class VectorDB:
         self.redis_client = redis_client
         self.index_key = "vector_db:faiss_index"
         self.ids_key = "vector_db:ids"
+        self.session = get_async_session()
 
-    def add(
+    async def add(
         self,
         embedding: list[float] | np.ndarray,
         item_id: str | None = None,
+        text: str = "",
     ) -> str:
-        """Добавить эмбеддинг и similarity."""
+        """Добавить эмбеддинг и similarity. Сохранить текст в базу данных."""
         vector = np.asarray(embedding, dtype=np.float32)
         if vector.ndim != 1:
             raise ValueError("Эмбеддинг должен быть одномерным вектором")
@@ -38,9 +45,15 @@ class VectorDB:
         resolved_item_id = item_id or str(uuid4())
         self.index.add(vector.reshape(1, -1))
         self.ids.append(resolved_item_id)
+        
+        await self.session.execute(
+            insert(Text).values(text_id=resolved_item_id, text="")  # Сохранение текста с пустой строкой
+        )
+        await self.session.commit()
+        
         return resolved_item_id
 
-    def search(self, query_embedding: list[float] | np.ndarray, top_k: int = 5) -> list[dict]:
+    async def search(self, query_embedding: list[float] | np.ndarray, top_k: int = 5) -> list[dict]:
         """Поиск наиболее похожих текстов по эмбеддингу запроса."""
         vector = np.asarray(query_embedding, dtype=np.float32)
         if vector.ndim != 1 or vector.size == 0:
@@ -57,10 +70,15 @@ class VectorDB:
         for idx, similarity in zip(indices[0], similarities[0]):
             if idx < 0:
                 continue
+            
+            text = await self.session.execute(select(Text).where(Text.text_id == self.ids[idx]))
+            text_result = text.scalar_one_or_none()
+            
             results.append(
                 {
                     "index": int(idx),
                     "id": self.ids[idx],
+                    "text": text_result.text if text_result else "",
                     "similarity": float(similarity),
                 }
             )

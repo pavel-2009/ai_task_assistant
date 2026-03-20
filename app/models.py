@@ -69,3 +69,12 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(20), unique=True, nullable=False)
     password = Column(String(128), nullable=False)
+    
+    
+class Text(Base):
+    """Модель текста NLP модуля"""
+    __tablename__ = "texts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    text_id = Column(String(64), unique=True, nullable=False)
+    text = Column(String(400), nullable=False)

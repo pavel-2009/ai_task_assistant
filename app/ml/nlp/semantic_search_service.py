@@ -38,16 +38,16 @@ class SemanticSearchService:
 
         return normalized_text
 
-    def index(self, text: str, item_id: str | None = None) -> str:
+    async def index(self, text: str, item_id: str | None = None) -> str:
         """Индексировать текст, добавляя его эмбеддинг в базу данных."""
         normalized_text = self._normalize_text(text, "Текст для индексирования")
         embedding = self.embedding_service.encode_one(normalized_text)
-        resolved_item_id = self.vector_db.add(embedding, item_id=item_id)
-        self.vector_db.save_to_redis()
+        resolved_item_id = await self.vector_db.add(embedding, item_id=item_id, text=normalized_text)
+        await self.vector_db.save_to_redis()
         self.clear_cache()
         return resolved_item_id
 
-    def search(self, query: str, top_k: int = 5) -> list[dict]:
+    async def search(self, query: str, top_k: int = 5) -> list[dict]:
         """Искать документы, наиболее похожие на запрос."""
         normalized_query = self._normalize_text(query, "Запрос")
 
@@ -56,7 +56,7 @@ class SemanticSearchService:
         if cached_result is not None:
             return cached_result
 
-        results = self.vector_db.search(self.embedding_service.encode_one(normalized_query), top_k=top_k)
+        results = await self.vector_db.search(self.embedding_service.encode_one(normalized_query), top_k=top_k)
         sorted_docs = sorted(results, key=lambda item: item["similarity"], reverse=True)[:top_k]
         self._save_to_cache(cache_key, sorted_docs)
         return sorted_docs
