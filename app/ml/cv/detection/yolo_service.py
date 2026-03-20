@@ -4,7 +4,7 @@
 
 from ultralytics import YOLO
 from PIL import Image
-import io
+import asyncio
 import numpy as np
 import cv2
 
@@ -90,6 +90,11 @@ class YoloService:
                 })
                 
         return dict_result
+    
+    async def predict_async(self, image_bytes: bytes) -> list[dict]:
+        """Асинхронные предсказания модели для изображения"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.predict, image_bytes)
     
     
     def export_onnx(self):
