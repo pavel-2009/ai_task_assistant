@@ -9,6 +9,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, status
 from redis import Redis
+import sys
+import os
 
 from app.celery_app import preload_models
 from app.db import REDIS_URL, close_redis
@@ -17,6 +19,8 @@ from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.vector_db import VectorDB
 
 logger = logging.getLogger(__name__)
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 @asynccontextmanager
