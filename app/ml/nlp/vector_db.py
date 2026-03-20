@@ -17,13 +17,11 @@ class VectorDB:
 
     def __init__(self, dim: int, redis_client: Redis | None = None):
         self.dim = dim
-        self.index = faiss.IndexFlatL2(dim)
-        self.texts: list[str] = []
-        self.ids: list[str] = []
+        self.index = faiss.IndexFlatIP(dim)
+        self.records: list[dict[str, str]] = []
         self.redis_client = redis_client
         self.index_key = "vector_db:faiss_index"
-        self.texts_key = "vector_db:texts"
-        self.ids_key = "vector_db:ids"
+        self.records_key = "vector_db:records"
 
     def add(
         self,
@@ -40,8 +38,7 @@ class VectorDB:
 
         resolved_item_id = item_id or str(uuid4())
         self.index.add(vector.reshape(1, -1))
-        self.texts.append(text)
-        self.ids.append(resolved_item_id)
+        self.records.append({"id": resolved_item_id, "text": text})
         return resolved_item_id
 
     def search(self, query_embedding: list[float] | np.ndarray, top_k: int = 5) -> list[dict]:
@@ -51,62 +48,56 @@ class VectorDB:
             raise ValueError("Эмбеддинг запроса не может быть пустым")
         if vector.shape[0] != self.dim:
             raise ValueError(f"Размерность эмбеддинга должна быть равна {self.dim}")
-        if not self.texts:
+        if not self.records:
             return []
 
-        limit = min(top_k, len(self.texts))
-        distances, indices = self.index.search(vector.reshape(1, -1), limit)
+        limit = min(top_k, len(self.records))
+        similarities, indices = self.index.search(vector.reshape(1, -1), limit)
 
         results: list[dict] = []
-        for idx, dist in zip(indices[0], distances[0]):
+        for idx, similarity in zip(indices[0], similarities[0]):
             if idx < 0:
                 continue
-            similarity = float(1.0 / (1.0 + float(dist)))
+            record = self.records[idx]
             results.append(
                 {
                     "index": int(idx),
-                    "id": self.ids[idx],
-                    "text": self.texts[idx],
-                    "similarity": similarity,
+                    "id": record["id"],
+                    "text": record["text"],
+                    "similarity": float(similarity),
                 }
             )
 
         return results
 
     def save_to_redis(self) -> bool:
-        """Сохранить индекс и тексты в Redis."""
+        """Сохранить индекс и метаданные в Redis."""
         if self.redis_client is None:
             return False
 
         try:
             pipeline = self.redis_client.pipeline()
             pipeline.set(self.index_key, faiss.serialize_index(self.index).tobytes())
-            pipeline.set(self.texts_key, pickle.dumps(self.texts))
-            pipeline.set(self.ids_key, pickle.dumps(self.ids))
+            pipeline.set(self.records_key, pickle.dumps(self.records))
             pipeline.execute()
             return True
         except Exception:
             return False
 
     def load_from_redis(self) -> bool:
-        """Загрузить индекс и тексты из Redis."""
+        """Загрузить индекс и метаданные из Redis."""
         if self.redis_client is None:
             return False
 
         try:
             index_bytes = self.redis_client.get(self.index_key)
-            texts_bytes = self.redis_client.get(self.texts_key)
-            ids_bytes = self.redis_client.get(self.ids_key)
+            records_bytes = self.redis_client.get(self.records_key)
 
             if index_bytes:
                 self.index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
-            if texts_bytes:
-                self.texts = pickle.loads(texts_bytes)
-            if ids_bytes:
-                self.ids = pickle.loads(ids_bytes)
-            elif self.texts:
-                self.ids = [str(index) for index in range(len(self.texts))]
+            if records_bytes:
+                self.records = pickle.loads(records_bytes)
 
-            return bool(index_bytes or texts_bytes or ids_bytes)
+            return bool(index_bytes or records_bytes)
         except Exception:
             return False

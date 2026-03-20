@@ -21,9 +21,11 @@ class FakeRedis:
         self.ttl[key] = ttl
         return True
 
-    def keys(self, pattern):
-        prefix = pattern[:-1] if pattern.endswith('*') else pattern
-        return [key for key in self.store if key.startswith(prefix)]
+    def scan_iter(self, match=None):
+        prefix = match[:-1] if match and match.endswith('*') else match
+        for key in self.store:
+            if prefix is None or key.startswith(prefix):
+                yield key
 
     def delete(self, *keys):
         for key in keys:
@@ -99,7 +101,7 @@ def test_semantic_search_service_uses_json_cache_with_ttl():
     results = service.search('query', top_k=1)
 
     assert results[0]['id'] == 'task-123'
-    cache_keys = redis.keys('semantic_search:*')
+    cache_keys = list(redis.scan_iter(match='semantic_search:*'))
     assert len(cache_keys) == 1
     assert redis.ttl[cache_keys[0]] == 3600
     assert redis.get(cache_keys[0]).startswith('[{"index": 0, "id": "task-123"')

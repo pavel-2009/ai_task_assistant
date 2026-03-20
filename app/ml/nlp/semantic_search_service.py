@@ -96,7 +96,7 @@ class SemanticSearchService:
             return
 
         try:
-            keys = self.redis_client.keys(f"{self.cache_prefix}*")
+            keys = list(self.redis_client.scan_iter(match=f"{self.cache_prefix}*"))
             if keys:
                 self.redis_client.delete(*keys)
         except Exception:
