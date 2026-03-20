@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import pickle
+from uuid import uuid4
 
 import faiss
 import numpy as np
@@ -18,11 +19,18 @@ class VectorDB:
         self.dim = dim
         self.index = faiss.IndexFlatL2(dim)
         self.texts: list[str] = []
+        self.ids: list[str] = []
         self.redis_client = redis_client
         self.index_key = "vector_db:faiss_index"
         self.texts_key = "vector_db:texts"
+        self.ids_key = "vector_db:ids"
 
-    def add(self, embedding: list[float] | np.ndarray, text: str) -> None:
+    def add(
+        self,
+        embedding: list[float] | np.ndarray,
+        text: str,
+        item_id: str | None = None,
+    ) -> str:
         """Добавить эмбеддинг и связанный с ним текст в базу данных."""
         vector = np.asarray(embedding, dtype=np.float32)
         if vector.ndim != 1:
@@ -30,8 +38,11 @@ class VectorDB:
         if vector.shape[0] != self.dim:
             raise ValueError(f"Размерность эмбеддинга должна быть равна {self.dim}")
 
+        resolved_item_id = item_id or str(uuid4())
         self.index.add(vector.reshape(1, -1))
         self.texts.append(text)
+        self.ids.append(resolved_item_id)
+        return resolved_item_id
 
     def search(self, query_embedding: list[float] | np.ndarray, top_k: int = 5) -> list[dict]:
         """Поиск наиболее похожих текстов по эмбеддингу запроса."""
@@ -54,6 +65,7 @@ class VectorDB:
             results.append(
                 {
                     "index": int(idx),
+                    "id": self.ids[idx],
                     "text": self.texts[idx],
                     "similarity": similarity,
                 }
@@ -70,6 +82,7 @@ class VectorDB:
             pipeline = self.redis_client.pipeline()
             pipeline.set(self.index_key, faiss.serialize_index(self.index).tobytes())
             pipeline.set(self.texts_key, pickle.dumps(self.texts))
+            pipeline.set(self.ids_key, pickle.dumps(self.ids))
             pipeline.execute()
             return True
         except Exception:
@@ -83,12 +96,17 @@ class VectorDB:
         try:
             index_bytes = self.redis_client.get(self.index_key)
             texts_bytes = self.redis_client.get(self.texts_key)
+            ids_bytes = self.redis_client.get(self.ids_key)
 
             if index_bytes:
                 self.index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
             if texts_bytes:
                 self.texts = pickle.loads(texts_bytes)
+            if ids_bytes:
+                self.ids = pickle.loads(ids_bytes)
+            elif self.texts:
+                self.ids = [str(index) for index in range(len(self.texts))]
 
-            return bool(index_bytes or texts_bytes)
+            return bool(index_bytes or texts_bytes or ids_bytes)
         except Exception:
             return False

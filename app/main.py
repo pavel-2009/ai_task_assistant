@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
         logger.info("Loading SemanticSearchService...")
         semantic_search_service = SemanticSearchService(
             embedding_service=embedding_service,
-            database=vector_db,
+            vector_db=vector_db,
             redis_client=redis_client,
         )
         app.state.semantic_search_service = semantic_search_service

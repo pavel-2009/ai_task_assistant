@@ -18,7 +18,6 @@ class EmbeddingService:
             device="cuda" if torch.cuda.is_available() else "cpu",
         )
         self.dimension = self.model.get_sentence_embedding_dimension()
-        self.database_service = None
 
     @staticmethod
     def _normalize_text(text: str) -> str:
