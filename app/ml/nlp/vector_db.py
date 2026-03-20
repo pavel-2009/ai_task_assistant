@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 import pickle
+import asyncio
 
 import faiss
 import numpy as np
@@ -27,6 +28,7 @@ class VectorDB:
         self.redis_client = redis_client
         self.index_key = "vector_db:faiss_index"
         self.ids_key = "vector_db:ids"
+        self._lock = asyncio.Lock()
 
     async def add(
         self,
@@ -43,15 +45,53 @@ class VectorDB:
             raise ValueError(f"Размерность эмбеддинга должна быть равна {self.dim}")
 
         resolved_item_id = item_id or str(uuid4())
-        self.index.add(vector.reshape(1, -1))
-        self.ids.append(resolved_item_id)
+        
+        async with self._lock:
+            try:
+                self.index.add(vector.reshape(1, -1))
+                self.ids.append(resolved_item_id)
+            except Exception as e:
+                raise RuntimeError(f"Ошибка при добавлении эмбеддинга в индекс: {e}")
         
         await session.execute(
             insert(Text).values(text_id=resolved_item_id, text=text)
         )
-        await session.commit()
         
         return resolved_item_id
+    
+    async def add_batch(self, embeddings: list[list[float]] | np.ndarray, session: AsyncSession, item_ids: list[str] | None = None, texts: list[str] | None = None) -> list[str]:
+        """Добавить несколько эмбеддингов и сохранить тексты в базу данных."""
+        vectors = np.asarray(embeddings, dtype=np.float32)
+        if vectors.ndim != 2 or vectors.shape[1] != self.dim:
+            raise ValueError(f"Эмбеддинги должны быть двумерным массивом с размерностью {self.dim}")
+
+        batch_size = vectors.shape[0]
+        
+        # Валидация item_ids
+        if item_ids is not None and len(item_ids) != batch_size:
+            raise ValueError(f"Длина item_ids ({len(item_ids)}) не совпадает с количеством эмбеддингов ({batch_size})")
+        
+        # Валидация texts
+        if texts is not None and len(texts) != batch_size:
+            raise ValueError(f"Длина texts ({len(texts)}) не совпадает с количеством эмбеддингов ({batch_size})")
+
+        resolved_item_ids = item_ids or [str(uuid4()) for _ in range(batch_size)]
+        
+        async with self._lock:
+            try:
+                self.index.add(vectors)
+                self.ids.extend(resolved_item_ids)
+            except Exception as e:
+                raise RuntimeError(f"Ошибка при добавлении эмбеддингов в индекс: {e}")
+        
+        if texts:
+            await session.execute(
+                insert(Text).values([
+                    {"text_id": item_id, "text": text} for item_id, text in zip(resolved_item_ids, texts)
+                ])
+            )
+        
+        return resolved_item_ids
 
     async def search(
         self,
@@ -65,28 +105,35 @@ class VectorDB:
             raise ValueError("Эмбеддинг запроса не может быть пустым")
         if vector.shape[0] != self.dim:
             raise ValueError(f"Размерность эмбеддинга должна быть равна {self.dim}")
-        if not self.ids:
-            return []
+        
+        async with self._lock:
+            if not self.ids:
+                return []
+            
+            # Проверка консистентности между индексом и ids
+            if self.index.ntotal != len(self.ids):
+                raise RuntimeError(f"Консистентность нарушена: размер индекса ({self.index.ntotal}) != размер ids ({len(self.ids)})")
 
-        limit = min(top_k, len(self.ids))
-        similarities, indices = self.index.search(vector.reshape(1, -1), limit)
+            limit = min(top_k, len(self.ids))
+            similarities, indices = self.index.search(vector.reshape(1, -1), limit)
 
         results: list[dict] = []
-        for idx, similarity in zip(indices[0], similarities[0]):
-            if idx < 0:
-                continue
+        
+        # Фильтруем только валидные индексы (>=0 и < len(self.ids))
+        valid_entries = [
+            (idx, sim) for idx, sim in zip(indices[0], similarities[0])
+            if idx >= 0 and idx < len(self.ids)
+        ]
+        
+        if valid_entries:
+            text_ids = [self.ids[idx] for idx, _ in valid_entries]
+            texts = await session.execute(select(Text).where(Text.text_id.in_(text_ids)))
             
-            text = await session.execute(select(Text).where(Text.text_id == self.ids[idx]))
-            text_result = text.scalar_one_or_none()
+            text_map = {text.text_id: text.text for text in texts.scalars().all()}
             
-            results.append(
-                {
-                    "index": int(idx),
-                    "id": self.ids[idx],
-                    "text": text_result.text if text_result else "",
-                    "similarity": float(similarity),
-                }
-            )
+            for idx, sim in valid_entries:
+                text_id = self.ids[idx]
+                results.append({"text_id": text_id, "similarity": float(sim), "text": text_map.get(text_id, "")})
 
         return results
 
@@ -96,9 +143,13 @@ class VectorDB:
             return False
 
         try:
+            async with self._lock:
+                index_data = faiss.serialize_index(self.index).tobytes()
+                ids_data = pickle.dumps(self.ids)
+            
             async with self.redis_client.pipeline(transaction=True) as pipeline:
-                await pipeline.set(self.index_key, faiss.serialize_index(self.index).tobytes())
-                await pipeline.set(self.ids_key, pickle.dumps(self.ids))
+                await pipeline.set(self.index_key, index_data)
+                await pipeline.set(self.ids_key, ids_data)
                 await pipeline.execute()
             return True
         except Exception:
@@ -113,10 +164,11 @@ class VectorDB:
             index_bytes = await self.redis_client.get(self.index_key)
             ids_bytes = await self.redis_client.get(self.ids_key)
 
-            if index_bytes:
-                self.index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
-            if ids_bytes:
-                self.ids = pickle.loads(ids_bytes)
+            async with self._lock:
+                if index_bytes:
+                    self.index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
+                if ids_bytes:
+                    self.ids = pickle.loads(ids_bytes)
 
             return bool(index_bytes or ids_bytes)
         except Exception:
