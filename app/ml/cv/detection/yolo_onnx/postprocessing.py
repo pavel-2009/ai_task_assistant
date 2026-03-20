@@ -12,9 +12,16 @@ class OutputPostprocessor:
     def __init__(self):
         self.postprocess_times = []
     
-    def postprocess(self, output: list[np.ndarray], scale: float, pad_x: int, pad_y: int, 
-                   orig_shape: tuple[int, int], conf_threshold: float = DEFAULT_CONF_THRESHOLD, 
-                   iou_threshold: float = DEFAULT_IOU_THRESHOLD) -> list[dict]:
+    def postprocess(
+        self,
+        output: list[np.ndarray],
+        scale: float,
+        pad_x: int,
+        pad_y: int, 
+        orig_shape: tuple[int, int],
+        conf_threshold: float = DEFAULT_CONF_THRESHOLD, 
+        iou_threshold: float = DEFAULT_IOU_THRESHOLD
+    ) -> list[dict]:
         """Ускоренный постпроцессинг с векторизацией"""
         start_time = time.time()
         
@@ -51,7 +58,7 @@ class OutputPostprocessor:
         x2 = (x_c + w/2 - pad_x) / scale
         y2 = (y_c + h/2 - pad_y) / scale
         
-        # Клиппинг к границам изображения
+        # Клиппинг к границам изображения. Векторизовано для всех координат сразу
         x1 = np.clip(x1, 0, orig_shape[1])
         y1 = np.clip(y1, 0, orig_shape[0])
         x2 = np.clip(x2, 0, orig_shape[1])

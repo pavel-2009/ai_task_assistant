@@ -21,14 +21,19 @@ from ....app.models import Text
 class VectorDB:
     """Класс для хранения эмбеддингов и поиска по ним с поддержкой Redis."""
 
-    def __init__(self, dim: int, redis_client: redis.Redis | None = None):
-        self.dim = dim
-        self.index = faiss.IndexFlatIP(dim)
+    def __init__(
+        self,
+        dim: int,
+        redis_client: redis.Redis | None = None
+    ) -> None:
+        
+        self.dim = dim # Размерность эмбеддингов
+        self.index = faiss.IndexFlatIP(dim) # Индекс для поиска по косинусной близости (нормализованные векторы)
         self.ids: list[str] = []
         self.redis_client = redis_client
         self.index_key = "vector_db:faiss_index"
         self.ids_key = "vector_db:ids"
-        self._lock = asyncio.Lock()
+        self._lock = asyncio.Lock() # Асинхронный лок для обеспечения потокобезопасности при добавлении и поиске
 
     async def add(
         self,
@@ -38,7 +43,9 @@ class VectorDB:
         text: str = "",
     ) -> str:
         """Добавить эмбеддинг и similarity. Сохранить текст в базу данных."""
+        
         vector = np.asarray(embedding, dtype=np.float32)
+        
         if vector.ndim != 1:
             raise ValueError("Эмбеддинг должен быть одномерным вектором")
         if vector.shape[0] != self.dim:
@@ -46,9 +53,9 @@ class VectorDB:
 
         resolved_item_id = item_id or str(uuid4())
         
-        async with self._lock:
+        async with self._lock: # Блокируем для обеспечения потокобезопасности при добавлении в индекс и обновлении ids
             try:
-                self.index.add(vector.reshape(1, -1))
+                self.index.add(vector.reshape(1, -1)) # -1 - для сохранения размерности (1, dim)
                 self.ids.append(resolved_item_id)
             except Exception as e:
                 raise RuntimeError(f"Ошибка при добавлении эмбеддинга в индекс: {e}")
@@ -59,9 +66,17 @@ class VectorDB:
         
         return resolved_item_id
     
-    async def add_batch(self, embeddings: list[list[float]] | np.ndarray, session: AsyncSession, item_ids: list[str] | None = None, texts: list[str] | None = None) -> list[str]:
+    async def add_batch(
+        self,
+        embeddings: list[list[float]] | np.ndarray,
+        session: AsyncSession,
+        item_ids: list[str] | None = None,
+        texts: list[str] | None = None
+    ) -> list[str]:
         """Добавить несколько эмбеддингов и сохранить тексты в базу данных."""
+        
         vectors = np.asarray(embeddings, dtype=np.float32)
+        
         if vectors.ndim != 2 or vectors.shape[1] != self.dim:
             raise ValueError(f"Эмбеддинги должны быть двумерным массивом с размерностью {self.dim}")
 
@@ -100,7 +115,9 @@ class VectorDB:
         top_k: int = 5,
     ) -> list[dict]:
         """Поиск наиболее похожих текстов по эмбеддингу запроса."""
+        
         vector = np.asarray(query_embedding, dtype=np.float32)
+        
         if vector.ndim != 1 or vector.size == 0:
             raise ValueError("Эмбеддинг запроса не может быть пустым")
         if vector.shape[0] != self.dim:

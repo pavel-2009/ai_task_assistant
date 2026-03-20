@@ -27,12 +27,12 @@ COCO_CLASSES = [
 # ONNX Runtime параметры
 def get_session_options() -> ort.SessionOptions:
     """Создание оптимизированных опций сессии ONNX Runtime"""
-    sess_options = ort.SessionOptions()
-    sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    sess_options.intra_op_num_threads = os.cpu_count()
-    sess_options.inter_op_num_threads = 1
+    sess_options = ort.SessionOptions() # Включаем оптимизации для ускорения инференса
+    sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL # Включаем все оптимизации
+    sess_options.intra_op_num_threads = os.cpu_count() # Используем все доступные ядра для оптимизации
+    sess_options.inter_op_num_threads = 1 # Устанавливаем 1 для последовательного выполнения, что может быть быстрее для небольших моделей
     sess_options.enable_cpu_mem_arena = False  # Отключаем для скорости
-    sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL # Последовательное выполнение может быть быстрее для небольших моделей
     return sess_options
 
 # Параметры инференса

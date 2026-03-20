@@ -43,8 +43,12 @@ class YoloONNXService:
         self.input_shape = self.session.get_inputs()[0].shape
         self.model_size = self.input_shape[2]  # 640 для yolov8n
     
-    def predict(self, image_bytes: bytes, conf_threshold: float = DEFAULT_CONF_THRESHOLD,
-                iou_threshold: float = DEFAULT_IOU_THRESHOLD) -> List[dict]:
+    def predict(
+        self,
+        image_bytes: bytes,
+        conf_threshold: float = DEFAULT_CONF_THRESHOLD,
+        iou_threshold: float = DEFAULT_IOU_THRESHOLD
+    ) -> List[dict]:
         """Получение предсказаний модели для изображения"""
         start_time = time.time()
         
@@ -63,7 +67,11 @@ class YoloONNXService:
         self.metrics.add_inference_time(inference_time)
         
         results = self.postprocessor.postprocess(
-            output, scale, pad_x, pad_y, orig_shape,
+            output,
+            scale,
+            pad_x,
+            pad_y,
+            orig_shape,
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold
         )

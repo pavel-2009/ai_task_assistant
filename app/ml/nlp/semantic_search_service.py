@@ -23,6 +23,7 @@ class SemanticSearchService:
         vector_db: VectorDB | None = None,
         redis_client: redis.Redis | None = None,
     ) -> None:
+        
         self.embedding_service = embedding_service
         self.redis_client = redis_client
         self.vector_db = vector_db or VectorDB(dim=embedding_service.dimension, redis_client=redis_client)
@@ -41,29 +42,40 @@ class SemanticSearchService:
 
     async def index(self, text: str, session: AsyncSession, item_id: str | None = None) -> str:
         """Индексировать текст, добавляя его эмбеддинг в базу данных."""
+        
         normalized_text = self._normalize_text(text, "Текст для индексирования")
+        
         embedding = self.embedding_service.encode_one(normalized_text)
+        
         resolved_item_id = await self.vector_db.add(
             embedding, session=session, item_id=item_id, text=normalized_text
         )
+        
         await self.vector_db.save_to_redis()
         await self.clear_cache()
+        
         return resolved_item_id
 
     async def search(self, query: str, session: AsyncSession, top_k: int = 5) -> list[dict]:
         """Искать документы, наиболее похожие на запрос."""
         normalized_query = self._normalize_text(query, "Запрос")
-
+        
+        # Генерируем ключ для кеша и пытаемся получить результат из кеша
         cache_key = self._get_cache_key(normalized_query, top_k)
         cached_result = await self._get_from_cache(cache_key)
+        
         if cached_result is not None:
             return cached_result
 
         results = await self.vector_db.search(
-            self.embedding_service.encode_one(normalized_query), session=session, top_k=top_k
+            self.embedding_service.encode_one(normalized_query),
+            session=session,
+            top_k=top_k
         )
+        
         sorted_docs = sorted(results, key=lambda item: item["similarity"], reverse=True)[:top_k]
         await self._save_to_cache(cache_key, sorted_docs)
+        
         return sorted_docs
 
     def _get_cache_key(self, query: str, top_k: int) -> str:

@@ -35,21 +35,26 @@ class SegmentationService:
         with torch.no_grad():
             output: torch.Tensor = self.model(image_tensor)['out'][0]
             
+        # Получаем маску классов и накладываем ее на исходное изображение
         mask = output.argmax(0).cpu().numpy().astype(np.uint8)
         mask_resized = cv2.resize(mask, original_size, interpolation=cv2.INTER_NEAREST)
         
         binary_mask = (mask_resized > 0).astype(np.uint8) * 255
         
-        contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Находим контуры сегментированных областей и визуализируем их на исходном изображении
+        contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE) # RETR_EXTERNAL - только внешние контуры, CHAIN_APPROX_SIMPLE - упрощение контуров для экономии памяти
         
         image_array = np.array(image_pil)
         
+        # Визуализация контуров с полупрозрачной заливкой для лучшей видимости
         overlay = image_array.copy()
         cv2.drawContours(overlay, contours, -1, (0, 255, 0), -1)
         
         alpha = 0.3
+        # Смешиваем исходное изображение с наложенной маской для создания эффекта полупрозрачности
         result = cv2.addWeighted(image_array, 1 - alpha, overlay, alpha, 0)
         
+        # Рисуем контуры поверх результата для четкого выделения границ сегментированных областей
         cv2.drawContours(result, contours, -1, (0, 255, 0), 2)
         
         result_pil = Image.fromarray(result)
