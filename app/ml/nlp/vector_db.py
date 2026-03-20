@@ -9,29 +9,29 @@ import pickle
 
 import faiss
 import numpy as np
-from redis import Redis
+import redis.asyncio as redis
 
 from sqlalchemy import select, insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....app.db import get_async_session
 from ....app.models import Text
 
 
 class VectorDB:
     """Класс для хранения эмбеддингов и поиска по ним с поддержкой Redis."""
 
-    def __init__(self, dim: int, redis_client: Redis | None = None):
+    def __init__(self, dim: int, redis_client: redis.Redis | None = None):
         self.dim = dim
         self.index = faiss.IndexFlatIP(dim)
         self.ids: list[str] = []
         self.redis_client = redis_client
         self.index_key = "vector_db:faiss_index"
         self.ids_key = "vector_db:ids"
-        self.session = get_async_session()
 
     async def add(
         self,
         embedding: list[float] | np.ndarray,
+        session: AsyncSession,
         item_id: str | None = None,
         text: str = "",
     ) -> str:
@@ -46,14 +46,19 @@ class VectorDB:
         self.index.add(vector.reshape(1, -1))
         self.ids.append(resolved_item_id)
         
-        await self.session.execute(
-            insert(Text).values(text_id=resolved_item_id, text="")  # Сохранение текста с пустой строкой
+        await session.execute(
+            insert(Text).values(text_id=resolved_item_id, text=text)
         )
-        await self.session.commit()
+        await session.commit()
         
         return resolved_item_id
 
-    async def search(self, query_embedding: list[float] | np.ndarray, top_k: int = 5) -> list[dict]:
+    async def search(
+        self,
+        query_embedding: list[float] | np.ndarray,
+        session: AsyncSession,
+        top_k: int = 5,
+    ) -> list[dict]:
         """Поиск наиболее похожих текстов по эмбеддингу запроса."""
         vector = np.asarray(query_embedding, dtype=np.float32)
         if vector.ndim != 1 or vector.size == 0:
@@ -71,7 +76,7 @@ class VectorDB:
             if idx < 0:
                 continue
             
-            text = await self.session.execute(select(Text).where(Text.text_id == self.ids[idx]))
+            text = await session.execute(select(Text).where(Text.text_id == self.ids[idx]))
             text_result = text.scalar_one_or_none()
             
             results.append(
@@ -85,28 +90,28 @@ class VectorDB:
 
         return results
 
-    def save_to_redis(self) -> bool:
+    async def save_to_redis(self) -> bool:
         """Сохранить индекс и метаданные в Redis."""
         if self.redis_client is None:
             return False
 
         try:
-            pipeline = self.redis_client.pipeline()
-            pipeline.set(self.index_key, faiss.serialize_index(self.index).tobytes())
-            pipeline.set(self.ids_key, pickle.dumps(self.ids))
-            pipeline.execute()
+            async with self.redis_client.pipeline(transaction=True) as pipeline:
+                await pipeline.set(self.index_key, faiss.serialize_index(self.index).tobytes())
+                await pipeline.set(self.ids_key, pickle.dumps(self.ids))
+                await pipeline.execute()
             return True
         except Exception:
             return False
 
-    def load_from_redis(self) -> bool:
+    async def load_from_redis(self) -> bool:
         """Загрузить индекс и метаданные из Redis."""
         if self.redis_client is None:
             return False
 
         try:
-            index_bytes = self.redis_client.get(self.index_key)
-            ids_bytes = self.redis_client.get(self.ids_key)
+            index_bytes = await self.redis_client.get(self.index_key)
+            ids_bytes = await self.redis_client.get(self.ids_key)
 
             if index_bytes:
                 self.index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))

@@ -7,7 +7,8 @@ from __future__ import annotations
 import hashlib
 import json
 
-from redis import Redis
+import redis.asyncio as redis
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .embedding_service import EmbeddingService
 from .vector_db import VectorDB
@@ -20,7 +21,7 @@ class SemanticSearchService:
         self,
         embedding_service: EmbeddingService,
         vector_db: VectorDB | None = None,
-        redis_client: Redis | None = None,
+        redis_client: redis.Redis | None = None,
     ) -> None:
         self.embedding_service = embedding_service
         self.redis_client = redis_client
@@ -38,27 +39,31 @@ class SemanticSearchService:
 
         return normalized_text
 
-    async def index(self, text: str, item_id: str | None = None) -> str:
+    async def index(self, text: str, session: AsyncSession, item_id: str | None = None) -> str:
         """Индексировать текст, добавляя его эмбеддинг в базу данных."""
         normalized_text = self._normalize_text(text, "Текст для индексирования")
         embedding = self.embedding_service.encode_one(normalized_text)
-        resolved_item_id = await self.vector_db.add(embedding, item_id=item_id, text=normalized_text)
+        resolved_item_id = await self.vector_db.add(
+            embedding, session=session, item_id=item_id, text=normalized_text
+        )
         await self.vector_db.save_to_redis()
-        self.clear_cache()
+        await self.clear_cache()
         return resolved_item_id
 
-    async def search(self, query: str, top_k: int = 5) -> list[dict]:
+    async def search(self, query: str, session: AsyncSession, top_k: int = 5) -> list[dict]:
         """Искать документы, наиболее похожие на запрос."""
         normalized_query = self._normalize_text(query, "Запрос")
 
         cache_key = self._get_cache_key(normalized_query, top_k)
-        cached_result = self._get_from_cache(cache_key)
+        cached_result = await self._get_from_cache(cache_key)
         if cached_result is not None:
             return cached_result
 
-        results = await self.vector_db.search(self.embedding_service.encode_one(normalized_query), top_k=top_k)
+        results = await self.vector_db.search(
+            self.embedding_service.encode_one(normalized_query), session=session, top_k=top_k
+        )
         sorted_docs = sorted(results, key=lambda item: item["similarity"], reverse=True)[:top_k]
-        self._save_to_cache(cache_key, sorted_docs)
+        await self._save_to_cache(cache_key, sorted_docs)
         return sorted_docs
 
     def _get_cache_key(self, query: str, top_k: int) -> str:
@@ -66,13 +71,13 @@ class SemanticSearchService:
         query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
         return f"{self.cache_prefix}{query_hash}:{top_k}"
 
-    def _get_from_cache(self, cache_key: str) -> list[dict] | None:
+    async def _get_from_cache(self, cache_key: str) -> list[dict] | None:
         """Получить результаты из Redis кеша."""
         if self.redis_client is None:
             return None
 
         try:
-            cached = self.redis_client.get(cache_key)
+            cached = await self.redis_client.get(cache_key)
             if cached:
                 return json.loads(cached)
         except Exception:
@@ -80,32 +85,36 @@ class SemanticSearchService:
 
         return None
 
-    def _save_to_cache(self, cache_key: str, results: list[dict], ttl: int = 3600) -> None:
+    async def _save_to_cache(self, cache_key: str, results: list[dict], ttl: int = 3600) -> None:
         """Сохранить результаты в Redis кеш с TTL."""
         if self.redis_client is None:
             return
 
         try:
-            self.redis_client.setex(cache_key, ttl, json.dumps(results, ensure_ascii=False))
+            await self.redis_client.setex(cache_key, ttl, json.dumps(results, ensure_ascii=False))
         except Exception:
             return
 
-    def clear_cache(self) -> None:
+    async def clear_cache(self) -> None:
         """Очистить весь кеш поиска."""
         if self.redis_client is None:
             return
 
         try:
-            keys = list(self.redis_client.scan_iter(match=f"{self.cache_prefix}*"))
-            if keys:
-                self.redis_client.delete(*keys)
+            cursor = 0
+            while True:
+                cursor, keys = await self.redis_client.scan(cursor, match=f"{self.cache_prefix}*")
+                if keys:
+                    await self.redis_client.delete(*keys)
+                if cursor == 0:
+                    break
         except Exception:
             return
 
-    def save_index(self) -> bool:
+    async def save_index(self) -> bool:
         """Сохранить FAISS индекс в Redis."""
-        return self.vector_db.save_to_redis()
+        return await self.vector_db.save_to_redis()
 
-    def load_index(self) -> bool:
+    async def load_index(self) -> bool:
         """Загрузить FAISS индекс из Redis."""
-        return self.vector_db.load_from_redis()
+        return await self.vector_db.load_from_redis()
