@@ -8,6 +8,9 @@ torchvision==0.25.0
 onnx==1.20.1
 onnxruntime==1.24.3
 
+faiss-cpu
+sentence-transformers
+
 # === FastAPI & Web ===
 fastapi==0.132.0
 uvicorn==0.41.0

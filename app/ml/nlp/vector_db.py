@@ -18,18 +18,17 @@ class VectorDB:
     def __init__(self, dim: int, redis_client: Redis | None = None):
         self.dim = dim
         self.index = faiss.IndexFlatIP(dim)
-        self.records: list[dict[str, str]] = []
+        self.ids: list[str] = []
         self.redis_client = redis_client
         self.index_key = "vector_db:faiss_index"
-        self.records_key = "vector_db:records"
+        self.ids_key = "vector_db:ids"
 
     def add(
         self,
         embedding: list[float] | np.ndarray,
-        text: str,
         item_id: str | None = None,
     ) -> str:
-        """Добавить эмбеддинг и связанный с ним текст в базу данных."""
+        """Добавить эмбеддинг и similarity."""
         vector = np.asarray(embedding, dtype=np.float32)
         if vector.ndim != 1:
             raise ValueError("Эмбеддинг должен быть одномерным вектором")
@@ -38,7 +37,7 @@ class VectorDB:
 
         resolved_item_id = item_id or str(uuid4())
         self.index.add(vector.reshape(1, -1))
-        self.records.append({"id": resolved_item_id, "text": text})
+        self.ids.append(resolved_item_id)
         return resolved_item_id
 
     def search(self, query_embedding: list[float] | np.ndarray, top_k: int = 5) -> list[dict]:
@@ -48,22 +47,20 @@ class VectorDB:
             raise ValueError("Эмбеддинг запроса не может быть пустым")
         if vector.shape[0] != self.dim:
             raise ValueError(f"Размерность эмбеддинга должна быть равна {self.dim}")
-        if not self.records:
+        if not self.ids:
             return []
 
-        limit = min(top_k, len(self.records))
+        limit = min(top_k, len(self.ids))
         similarities, indices = self.index.search(vector.reshape(1, -1), limit)
 
         results: list[dict] = []
         for idx, similarity in zip(indices[0], similarities[0]):
             if idx < 0:
                 continue
-            record = self.records[idx]
             results.append(
                 {
                     "index": int(idx),
-                    "id": record["id"],
-                    "text": record["text"],
+                    "id": self.ids[idx],
                     "similarity": float(similarity),
                 }
             )
@@ -78,7 +75,7 @@ class VectorDB:
         try:
             pipeline = self.redis_client.pipeline()
             pipeline.set(self.index_key, faiss.serialize_index(self.index).tobytes())
-            pipeline.set(self.records_key, pickle.dumps(self.records))
+            pipeline.set(self.ids_key, pickle.dumps(self.ids))
             pipeline.execute()
             return True
         except Exception:
@@ -91,13 +88,13 @@ class VectorDB:
 
         try:
             index_bytes = self.redis_client.get(self.index_key)
-            records_bytes = self.redis_client.get(self.records_key)
+            ids_bytes = self.redis_client.get(self.ids_key)
 
             if index_bytes:
                 self.index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
-            if records_bytes:
-                self.records = pickle.loads(records_bytes)
+            if ids_bytes:
+                self.ids = pickle.loads(ids_bytes)
 
-            return bool(index_bytes or records_bytes)
+            return bool(index_bytes or ids_bytes)
         except Exception:
             return False
