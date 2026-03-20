@@ -2,116 +2,141 @@
 Роутер для обработки запросов, связанных с NLP (Natural Language Processing).
 """
 
-from fastapi import APIRouter, HTTPException, Request, Body, status
+from __future__ import annotations
 
 import asyncio
 
+from fastapi import APIRouter, Body, HTTPException, Request, status
+
 from ..ml.nlp.embedding_service import EmbeddingService
+from ..ml.nlp.semantic_search_service import SemanticSearchService
+
+router = APIRouter(prefix="/nlp", tags=["NLP"])
 
 
-router = APIRouter(
-    prefix="/nlp",
-    tags=["NLP"]
-)
+MAX_BATCH_SIZE = 10
+MAX_TEXT_LENGTH = 1000
+
+
+def _normalize_text(text: str) -> str:
+    if not isinstance(text, str):
+        raise HTTPException(status_code=400, detail="Текст должен быть строкой")
+
+    normalized_text = text.strip()
+    if not normalized_text:
+        raise HTTPException(status_code=400, detail="Текст не может быть пустым")
+    if len(normalized_text) > MAX_TEXT_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Текст слишком длинный. Максимум {MAX_TEXT_LENGTH} символов",
+        )
+
+    return normalized_text
+
+
+def _normalize_texts(payload: str | list[str]) -> str | list[str]:
+    if isinstance(payload, str):
+        return _normalize_text(payload)
+    if isinstance(payload, list):
+        if not payload:
+            raise HTTPException(status_code=400, detail="Список текстов не может быть пустым")
+        if len(payload) > MAX_BATCH_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Слишком много текстов в списке. Максимум {MAX_BATCH_SIZE}",
+            )
+        return [_normalize_text(item) for item in payload]
+
+    raise HTTPException(
+        status_code=400,
+        detail="Неверный формат данных. Ожидается строка или список строк",
+    )
+
+
+def _get_embedding_service(request: Request) -> EmbeddingService:
+    embedding_service = getattr(request.app.state, "embedding_service", None)
+    if embedding_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="EmbeddingService не инициализирован. Проверьте логи приложения",
+        )
+    return embedding_service
+
+
+def _get_semantic_search_service(request: Request) -> SemanticSearchService:
+    semantic_search_service = getattr(request.app.state, "semantic_search_service", None)
+    if semantic_search_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="SemanticSearchService не инициализирован. Проверьте логи приложения",
+        )
+    return semantic_search_service
 
 
 @router.post("/embedding", description="Получить эмбеддинг для текста")
 async def get_embedding(request: Request, text: str | list[str] = Body(...)):
-    """Получить эмбеддинг для текста"""
-    
-    if len(text) == 0:
-        raise HTTPException(status_code=400, detail="Текст не может быть пустым")
-    
-    if isinstance(text, list) and any(len(t) == 0 for t in text):
-        raise HTTPException(status_code=400, detail="Один из текстов в списке пустой")
-    
-    if isinstance(text, list) and len(text) > 10:
-        raise HTTPException(status_code=400, detail="Слишком много текстов в списке. Максимум 10")
-    
-    if isinstance(text, str) and len(text) > 1000:
-        raise HTTPException(status_code=400, detail="Текст слишком длинный. Максимум 1000 символов")
-    
-    if isinstance(text, list) and any(len(t) > 1000 for t in text):
-        raise HTTPException(status_code=400, detail="Один из текстов в списке слишком длинный. Максимум 1000 символов")
-    
-    if isinstance(text, list) and any(not isinstance(t, str) for t in text):
-        raise HTTPException(status_code=400, detail="Все элементы в списке должны быть строками")
-    
+    """Получить эмбеддинг для текста."""
+    normalized_payload = _normalize_texts(text)
+    embedding_service = _get_embedding_service(request)
+
     try:
-        embedding_service: EmbeddingService = request.app.state.embedding_service
-    except AttributeError:
-        raise HTTPException(status_code=503, detail="EmbeddingService не инициализирован. Проверьте логи приложения")
-    
-    try:
-        
-        match text:
-            case str():
-                embedding = await asyncio.to_thread(embedding_service.encode_one, text)
-            case list():
-                embedding = await asyncio.to_thread(embedding_service.encode_batch, text)
-            case _:
-                raise HTTPException(status_code=400, detail="Неверный формат данных. Ожидается строка или список строк")
-        
-        return {"embedding": embedding.tolist()} # Преобразуем numpy массив в список для JSON сериализации
-    
-    except Exception as e:
-        
-        raise HTTPException(status_code=500, detail=str(e))
-    
-    
-@router.post("/search", description="Искать документы, наиболее похожие на запрос", status_code=status.HTTP_200_OK)
+        if isinstance(normalized_payload, str):
+            embedding = await asyncio.to_thread(embedding_service.encode_one, normalized_payload)
+        else:
+            embedding = await asyncio.to_thread(embedding_service.encode_batch, normalized_payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {"embedding": embedding.tolist()}
+
+
+@router.post(
+    "/search",
+    description="Искать документы, наиболее похожие на запрос",
+    status_code=status.HTTP_200_OK,
+)
 async def search(
     request: Request,
     query: str = Body(..., embed=True, description="Текст запроса для поиска"),
-    top_k: int = Body(5, embed=True, description="Количество результатов для возврата")
+    top_k: int = Body(5, embed=True, description="Количество результатов для возврата"),
 ):
-    """Поиск документов, наиболее похожих на запрос"""
-    
-    if len(query) == 0:
-        raise HTTPException(status_code=400, detail="Запрос не может быть пустым")
-    
+    """Поиск документов, наиболее похожих на запрос."""
+    normalized_query = _normalize_text(query)
     if top_k <= 0 or top_k > 20:
         raise HTTPException(status_code=400, detail="top_k должен быть в диапазоне от 1 до 20")
-    
+
+    semantic_search_service = _get_semantic_search_service(request)
+
     try:
-        embedding_service: EmbeddingService = request.app.state.embedding_service
-    except AttributeError:
-        raise HTTPException(status_code=503, detail="EmbeddingService не инициализирован. Проверьте логи приложения")
-    
-    try:
-        semantic_search_service = request.app.state.semantic_search_service
-    except AttributeError:
-        raise HTTPException(status_code=503, detail="SemanticSearchService не инициализирован. Проверьте логи приложения")
-    
-    try:
-        results = await asyncio.to_thread(semantic_search_service.search, query, top_k)
-        return {"results": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-    
-@router.post("/index", description="Индексировать текст, добавляя его эмбеддинг в базу данных", status_code=status.HTTP_200_OK)
+        results = await asyncio.to_thread(semantic_search_service.search, normalized_query, top_k)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {"results": results}
+
+
+@router.post(
+    "/index",
+    description="Индексировать текст, добавляя его эмбеддинг в базу данных",
+    status_code=status.HTTP_200_OK,
+)
 async def index(
     request: Request,
     text: str = Body(..., embed=True, description=""),
 ):
-    """Индексировать текст, добавляя его эмбеддинг в базу данных"""
-    
-    if len(text) == 0:
-        raise HTTPException(status_code=400, detail="Текст не может быть пустым")
-    
+    """Индексировать текст, добавляя его эмбеддинг в базу данных."""
+    normalized_text = _normalize_text(text)
+    semantic_search_service = _get_semantic_search_service(request)
+
     try:
-        embedding_service: EmbeddingService = request.app.state.embedding_service
-    except AttributeError:
-        raise HTTPException(status_code=503, detail="EmbeddingService не инициализирован. Проверьте логи приложения")
-    
-    try:
-        semantic_search_service = request.app.state.semantic_search_service
-    except AttributeError:
-        raise HTTPException(status_code=503, detail="SemanticSearchService не инициализирован. Проверьте логи приложения")
-    
-    try:
-        await asyncio.to_thread(semantic_search_service.index, text)
-        return {"detail": "Текст успешно индексирован"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        await asyncio.to_thread(semantic_search_service.index, normalized_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {"detail": "Текст успешно индексирован"}
