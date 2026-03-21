@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.ml.nlp.ner_service import NerService
+pytest.importorskip("spacy")
 
 
 class FakeEntity:
@@ -59,6 +59,8 @@ class FakeNLP:
 
 @pytest.fixture
 def ner_service(monkeypatch):
+    from app.ml.nlp.ner_service import NerService
+
     fake_nlp = FakeNLP()
     monkeypatch.setattr("app.ml.nlp.ner_service.spacy.load", lambda model_name: fake_nlp)
     monkeypatch.setattr("app.ml.nlp.ner_service.Span.has_extension", lambda name: True)
@@ -66,7 +68,6 @@ def ner_service(monkeypatch):
 
 
 def test_extract_technologies_special_cases(ner_service):
-    """Тест извлечения технологий, добавленных через EntityRuler."""
     technologies = dict(ner_service.extract_technologies("Я использую C++ и React.js"))
 
     assert technologies["c++"] == 0.95
@@ -74,7 +75,6 @@ def test_extract_technologies_special_cases(ner_service):
 
 
 def test_extract_technologies_with_company(ner_service):
-    """Тест: компания не должна попадать в технологии."""
     technologies = dict(ner_service.extract_technologies("Разрабатываю в Google на Go"))
 
     assert "google" not in technologies
@@ -82,13 +82,11 @@ def test_extract_technologies_with_company(ner_service):
 
 
 def test_extract_technologies_empty(ner_service):
-    """Тест на пустой текст."""
     technologies = ner_service.extract_technologies("")
     assert technologies == []
 
 
 def test_tag_task_format(ner_service):
-    """Тест формата ответа tag_task."""
     result = ner_service.tag_task("Использую C++ и Redis")
 
     assert "technologies" in result

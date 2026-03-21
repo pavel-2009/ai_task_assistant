@@ -2,8 +2,10 @@
 Тестирования математических операций
 """
 
-import numpy as np
-import torch
+import pytest
+
+np = pytest.importorskip("numpy")
+torch = pytest.importorskip("torch")
 
 from app.utils import math_ops
 from app.utils import torch_basic
@@ -36,9 +38,9 @@ def test_opposite():
 def test_linreg_study():
     """Тестирование функции обучения линейной регрессии в PyTorch"""
 
-    X = [[1], [2], [3], [4], [5]]
-    Y = [[2], [4], [6], [8], [10]]
-    w, b = torch_basic.linear_regression_training(X, Y)
+    x_values = [[1], [2], [3], [4], [5]]
+    y_values = [[2], [4], [6], [8], [10]]
+    w, b = torch_basic.linear_regression_training(x_values, y_values)
 
     assert abs(w - 2) < 0.1
     assert abs(b) < 0.1
