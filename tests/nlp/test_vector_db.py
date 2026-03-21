@@ -1,10 +1,11 @@
-import numpy as np
+import json
+from unittest.mock import AsyncMock
 
-from sqlalchemy.ext.asyncio import AsyncSession
+import numpy as np
+import pytest
 
 from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.vector_db import VectorDB
-from app.db import get_async_session
 
 
 class FakeRedis:
@@ -12,31 +13,30 @@ class FakeRedis:
         self.store = {}
         self.ttl = {}
 
-    def get(self, key):
+    async def get(self, key):
         return self.store.get(key)
 
-    def set(self, key, value):
+    async def set(self, key, value):
         self.store[key] = value
         return True
 
-    def setex(self, key, ttl, value):
+    async def setex(self, key, ttl, value):
         self.store[key] = value
         self.ttl[key] = ttl
         return True
 
-    def scan_iter(self, match=None):
-        prefix = match[:-1] if match and match.endswith('*') else match
-        for key in self.store:
-            if prefix is None or key.startswith(prefix):
-                yield key
+    async def scan(self, cursor, match=None):
+        prefix = match[:-1] if match and match.endswith("*") else match
+        keys = [key for key in self.store if prefix is None or key.startswith(prefix)]
+        return 0, keys
 
-    def delete(self, *keys):
+    async def delete(self, *keys):
         for key in keys:
             self.store.pop(key, None)
             self.ttl.pop(key, None)
         return len(keys)
 
-    def pipeline(self):
+    def pipeline(self, transaction=True):
         return FakePipeline(self)
 
 
@@ -45,14 +45,31 @@ class FakePipeline:
         self.redis = redis
         self.commands = []
 
-    def set(self, key, value):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def set(self, key, value):
         self.commands.append((key, value))
         return self
 
-    def execute(self):
+    async def execute(self):
         for key, value in self.commands:
-            self.redis.set(key, value)
+            self.redis.store[key] = value
         return True
+
+
+class FakeResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._rows
 
 
 class StubEmbeddingService:
@@ -60,40 +77,57 @@ class StubEmbeddingService:
 
     def encode_one(self, text: str) -> np.ndarray:
         base = {
-            'doc-1': np.array([1.0, 0.0, 0.0], dtype=np.float32),
-            'doc-2': np.array([0.0, 1.0, 0.0], dtype=np.float32),
-            'query': np.array([1.0, 0.0, 0.0], dtype=np.float32),
+            "doc-1": np.array([1.0, 0.0, 0.0], dtype=np.float32),
+            "doc-2": np.array([0.0, 1.0, 0.0], dtype=np.float32),
+            "query": np.array([1.0, 0.0, 0.0], dtype=np.float32),
         }
         return base[text]
 
 
-def test_vector_db_returns_index_to_id_mapping_and_persists_it():
+@pytest.mark.asyncio
+async def test_vector_db_persists_ids_and_returns_text_mapping():
     redis = FakeRedis()
     vector_db = VectorDB(dim=3, redis_client=redis)
-    
-    session = get_async_session()
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[None, FakeResult([type("TextRow", (), {"text_id": "task-123", "text": "doc-1"})()])])
 
-    item_id = vector_db.add(np.array([1.0, 0.0, 0.0], dtype=np.float32), 'doc-1', item_id='task-123', session=session)
-    assert item_id == 'task-123'
-    assert vector_db.save_to_redis() is True
+    item_id = await vector_db.add(
+        np.array([1.0, 0.0, 0.0], dtype=np.float32),
+        session=session,
+        item_id="task-123",
+        text="doc-1",
+    )
+    assert item_id == "task-123"
+    assert await vector_db.save_to_redis() is True
 
     restored = VectorDB(dim=3, redis_client=redis)
-    assert restored.load_from_redis() is True
+    assert await restored.load_from_redis() is True
 
-    results = restored.search(np.array([1.0, 0.0, 0.0], dtype=np.float32), top_k=1)
+    results = await restored.search(
+        np.array([1.0, 0.0, 0.0], dtype=np.float32),
+        session=session,
+        top_k=1,
+    )
     assert results == [
         {
-            'index': 0,
-            'id': 'task-123',
-            'text': 'doc-1',
-            'similarity': 1.0,
+            "text_id": "task-123",
+            "text": "doc-1",
+            "similarity": 1.0,
         }
     ]
 
 
-def test_semantic_search_service_uses_json_cache_with_ttl():
+@pytest.mark.asyncio
+async def test_semantic_search_service_uses_json_cache_with_ttl():
     redis = FakeRedis()
-    session = get_async_session()
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            None,
+            None,
+            FakeResult([type("TextRow", (), {"text_id": "task-123", "text": "doc-1"})()]),
+        ]
+    )
     vector_db = VectorDB(dim=3, redis_client=redis)
     service = SemanticSearchService(
         embedding_service=StubEmbeddingService(),
@@ -101,13 +135,13 @@ def test_semantic_search_service_uses_json_cache_with_ttl():
         redis_client=redis,
     )
 
-    service.index('doc-1', item_id='task-123', session=session)
-    service.index('doc-2', item_id='task-456', session=session)
+    await service.index("doc-1", item_id="task-123", session=session)
+    await service.index("doc-2", item_id="task-456", session=session)
 
-    results = service.search('query', top_k=1, session=session)
+    results = await service.search("query", top_k=1, session=session)
 
-    assert results[0]['id'] == 'task-123'
-    cache_keys = list(redis.scan_iter(match='semantic_search:*'))
+    assert results[0]["text_id"] == "task-123"
+    cache_keys = [key for key in redis.store if key.startswith("semantic_search:")]
     assert len(cache_keys) == 1
     assert redis.ttl[cache_keys[0]] == 3600
-    assert redis.get(cache_keys[0]).startswith('[{"index": 0, "id": "task-123"')
+    assert json.loads(redis.store[cache_keys[0]]) == results
