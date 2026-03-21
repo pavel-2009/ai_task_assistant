@@ -15,7 +15,7 @@ import redis.asyncio as redis
 from sqlalchemy import select, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....app.models import Text
+from app.models import Text
 
 
 class VectorDB:

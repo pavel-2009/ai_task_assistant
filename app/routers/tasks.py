@@ -2,15 +2,16 @@
 Роутер для управления задачами 
 """
 
-from fastapi import APIRouter, status, Depends, HTTPException, Path
+from fastapi import APIRouter, status, Depends, HTTPException, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
+
+import typing
+import json
 
 from app.models import Task, TaskGet, TaskCreate, TaskUpdate, User
 from app.db import get_async_session
 from app.auth import get_current_user
-
-import typing
 
 
 router = APIRouter(
@@ -44,12 +45,18 @@ async def get_tasks(
 async def create_task(
     task: TaskCreate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
+    request: Request = None
 ):
     """Создание задачи"""
     
     task = Task(**task.model_dump())
     task.author_id = current_user.id
+    
+    if task.description:
+        ner_service = request.app.state.ner_service
+        ner_result = ner_service.tag_task(task.description)
+        task.tags = json.dumps(ner_result)  # Сохранение тегов в виде JSON строки
 
     session.add(task)
     await session.commit()

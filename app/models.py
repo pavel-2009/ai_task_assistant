@@ -14,7 +14,7 @@ class TaskBase(BaseModel):
     title: str = Field(min_length=1, max_length=20, description="Название задачи")
     description: str = Field(max_length=400, description="Описание задачи")
     avatar_file: str = Field(max_length=256, description="Путь к файлу аватара задачи", default=None)
-
+    tags: str = Field(max_length=256, description="Теги задачи", default=None)
 
 
 class TaskCreate(TaskBase):
@@ -60,6 +60,7 @@ class Task(Base):
     description = Column(String(400), nullable=True)
     author_id = Column(Integer, nullable=False)
     avatar_file = Column(String(256), nullable=True)
+    tags = Column(String(256), nullable=True)  # Сохранение тегов в виде строки, например, JSON
 
 
 class User(Base):

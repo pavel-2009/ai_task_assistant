@@ -17,6 +17,7 @@ from app.db import REDIS_URL, close_redis
 from app.ml.nlp.embedding_service import EmbeddingService
 from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.vector_db import VectorDB
+from app.ml.nlp.ner_service import NerService
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,12 @@ async def lifespan(app: FastAPI):
         )
         app.state.semantic_search_service = semantic_search_service
         logger.info("SemanticSearchService loaded successfully")
+        
+        logger.info("Loading NER model...")
+        ner_service = NerService()
+        app.state.ner_service = ner_service
+        logger.info("NER model loaded successfully")
+        
     except Exception as exc:
         logger.error("Error during startup: %s", exc, exc_info=True)
         raise

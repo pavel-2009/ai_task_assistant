@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, HTTPException, Request, status
 
 from ..ml.nlp.embedding_service import EmbeddingService
 from ..ml.nlp.semantic_search_service import SemanticSearchService
+from ..ml.nlp.ner_service import NerService
 
 router = APIRouter(prefix="/nlp", tags=["NLP"])
 
@@ -71,6 +72,16 @@ def _get_semantic_search_service(request: Request) -> SemanticSearchService:
             detail="SemanticSearchService не инициализирован. Проверьте логи приложения",
         )
     return semantic_search_service
+
+
+def _get_ner_service(request: Request) -> NerService:
+    ner_service = getattr(request.app.state, "ner_service", None)
+    if ner_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="NerService не инициализирован. Проверьте логи приложения",
+        )
+    return ner_service
 
 
 @router.post("/embedding", description="Получить эмбеддинг для текста")
@@ -140,3 +151,12 @@ async def index(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return {"detail": "Текст успешно индексирован"}
+
+
+@router.post("/tag-task", description="Получить теги для текста задачи")
+async def tag_task(request: Request, text: str = Body(...)):
+    """Получить теги для текста задачи."""
+    ner_service = _get_ner_service(request)
+    result = asyncio.to_thread(ner_service.tag_task, text)
+    tags = await result
+    return {"tags": tags}

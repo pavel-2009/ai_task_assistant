@@ -1,7 +1,10 @@
 import numpy as np
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.vector_db import VectorDB
+from app.db import get_async_session
 
 
 class FakeRedis:
@@ -67,8 +70,10 @@ class StubEmbeddingService:
 def test_vector_db_returns_index_to_id_mapping_and_persists_it():
     redis = FakeRedis()
     vector_db = VectorDB(dim=3, redis_client=redis)
+    
+    session = get_async_session()
 
-    item_id = vector_db.add(np.array([1.0, 0.0, 0.0], dtype=np.float32), 'doc-1', item_id='task-123')
+    item_id = vector_db.add(np.array([1.0, 0.0, 0.0], dtype=np.float32), 'doc-1', item_id='task-123', session=session)
     assert item_id == 'task-123'
     assert vector_db.save_to_redis() is True
 
@@ -88,6 +93,7 @@ def test_vector_db_returns_index_to_id_mapping_and_persists_it():
 
 def test_semantic_search_service_uses_json_cache_with_ttl():
     redis = FakeRedis()
+    session = get_async_session()
     vector_db = VectorDB(dim=3, redis_client=redis)
     service = SemanticSearchService(
         embedding_service=StubEmbeddingService(),
@@ -95,10 +101,10 @@ def test_semantic_search_service_uses_json_cache_with_ttl():
         redis_client=redis,
     )
 
-    service.index('doc-1', item_id='task-123')
-    service.index('doc-2', item_id='task-456')
+    service.index('doc-1', item_id='task-123', session=session)
+    service.index('doc-2', item_id='task-456', session=session)
 
-    results = service.search('query', top_k=1)
+    results = service.search('query', top_k=1, session=session)
 
     assert results[0]['id'] == 'task-123'
     cache_keys = list(redis.scan_iter(match='semantic_search:*'))
