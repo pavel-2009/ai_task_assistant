@@ -1,8 +1,13 @@
+import asyncio
 import json
 from unittest.mock import AsyncMock
 
-import numpy as np
 import pytest
+
+np = pytest.importorskip("numpy")
+pytest.importorskip("faiss")
+pytest.importorskip("redis")
+pytest.importorskip("sqlalchemy")
 
 from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.vector_db import VectorDB
@@ -84,64 +89,68 @@ class StubEmbeddingService:
         return base[text]
 
 
-@pytest.mark.asyncio
-async def test_vector_db_persists_ids_and_returns_text_mapping():
-    redis = FakeRedis()
-    vector_db = VectorDB(dim=3, redis_client=redis)
-    session = AsyncMock()
-    session.execute = AsyncMock(side_effect=[None, FakeResult([type("TextRow", (), {"text_id": "task-123", "text": "doc-1"})()])])
+def test_vector_db_persists_ids_and_returns_text_mapping():
+    async def scenario():
+        redis = FakeRedis()
+        vector_db = VectorDB(dim=3, redis_client=redis)
+        session = AsyncMock()
+        session.execute = AsyncMock(side_effect=[None, FakeResult([type("TextRow", (), {"text_id": "task-123", "text": "doc-1"})()])])
 
-    item_id = await vector_db.add(
-        np.array([1.0, 0.0, 0.0], dtype=np.float32),
-        session=session,
-        item_id="task-123",
-        text="doc-1",
-    )
-    assert item_id == "task-123"
-    assert await vector_db.save_to_redis() is True
+        item_id = await vector_db.add(
+            np.array([1.0, 0.0, 0.0], dtype=np.float32),
+            session=session,
+            item_id="task-123",
+            text="doc-1",
+        )
+        assert item_id == "task-123"
+        assert await vector_db.save_to_redis() is True
 
-    restored = VectorDB(dim=3, redis_client=redis)
-    assert await restored.load_from_redis() is True
+        restored = VectorDB(dim=3, redis_client=redis)
+        assert await restored.load_from_redis() is True
 
-    results = await restored.search(
-        np.array([1.0, 0.0, 0.0], dtype=np.float32),
-        session=session,
-        top_k=1,
-    )
-    assert results == [
-        {
-            "text_id": "task-123",
-            "text": "doc-1",
-            "similarity": 1.0,
-        }
-    ]
-
-
-@pytest.mark.asyncio
-async def test_semantic_search_service_uses_json_cache_with_ttl():
-    redis = FakeRedis()
-    session = AsyncMock()
-    session.execute = AsyncMock(
-        side_effect=[
-            None,
-            None,
-            FakeResult([type("TextRow", (), {"text_id": "task-123", "text": "doc-1"})()]),
+        results = await restored.search(
+            np.array([1.0, 0.0, 0.0], dtype=np.float32),
+            session=session,
+            top_k=1,
+        )
+        assert results == [
+            {
+                "text_id": "task-123",
+                "text": "doc-1",
+                "similarity": 1.0,
+            }
         ]
-    )
-    vector_db = VectorDB(dim=3, redis_client=redis)
-    service = SemanticSearchService(
-        embedding_service=StubEmbeddingService(),
-        vector_db=vector_db,
-        redis_client=redis,
-    )
 
-    await service.index("doc-1", item_id="task-123", session=session)
-    await service.index("doc-2", item_id="task-456", session=session)
+    asyncio.run(scenario())
 
-    results = await service.search("query", top_k=1, session=session)
 
-    assert results[0]["text_id"] == "task-123"
-    cache_keys = [key for key in redis.store if key.startswith("semantic_search:")]
-    assert len(cache_keys) == 1
-    assert redis.ttl[cache_keys[0]] == 3600
-    assert json.loads(redis.store[cache_keys[0]]) == results
+def test_semantic_search_service_uses_json_cache_with_ttl():
+    async def scenario():
+        redis = FakeRedis()
+        session = AsyncMock()
+        session.execute = AsyncMock(
+            side_effect=[
+                None,
+                None,
+                FakeResult([type("TextRow", (), {"text_id": "task-123", "text": "doc-1"})()]),
+            ]
+        )
+        vector_db = VectorDB(dim=3, redis_client=redis)
+        service = SemanticSearchService(
+            embedding_service=StubEmbeddingService(),
+            vector_db=vector_db,
+            redis_client=redis,
+        )
+
+        await service.index("doc-1", item_id="task-123", session=session)
+        await service.index("doc-2", item_id="task-456", session=session)
+
+        results = await service.search("query", top_k=1, session=session)
+
+        assert results[0]["text_id"] == "task-123"
+        cache_keys = [key for key in redis.store if key.startswith("semantic_search:")]
+        assert len(cache_keys) == 1
+        assert redis.ttl[cache_keys[0]] == 3600
+        assert json.loads(redis.store[cache_keys[0]]) == results
+
+    asyncio.run(scenario())

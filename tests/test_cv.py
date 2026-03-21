@@ -5,18 +5,19 @@
 import io
 import uuid
 
-from fastapi.testclient import TestClient
-from PIL import Image
 import pytest
 
-from app.main import app
+pytest.importorskip("fastapi")
+pytest.importorskip("sqlalchemy")
+pytest.importorskip("aiosqlite")
+pytest.importorskip("jwt")
+pytest.importorskip("bcrypt")
+pytest.importorskip("multipart")
+pytest.importorskip("PIL")
 
+from PIL import Image
 
-@pytest.fixture
-def client():
-    """Фикстура для создания тестового клиента FastAPI"""
-    with TestClient(app) as c:
-        yield c
+from tests._api_test_utils import make_test_client
 
 
 def _build_image_bytes() -> bytes:
@@ -26,43 +27,42 @@ def _build_image_bytes() -> bytes:
     return buffer.getvalue()
 
 
-def test_upload_avatar(client: TestClient):
+def test_upload_avatar():
     """Проверка загрузки аватара для задачи"""
 
     username = f"testuser_{uuid.uuid4().hex[:8]}"
     password = "testpassword"
 
-    registration_data = {
-        "username": username,
-        "password": password,
-    }
-    response = client.post("/auth/register", json=registration_data)
-    assert response.status_code == 201
+    with make_test_client() as client:
+        registration_data = {
+            "username": username,
+            "password": password,
+        }
+        response = client.post("/auth/register", json=registration_data)
+        assert response.status_code == 201
 
-    login_data = {
-        "username": username,
-        "password": password,
-    }
-    response = client.post("/auth/login", data=login_data)
-    assert response.status_code == 200
+        login_data = {
+            "username": username,
+            "password": password,
+        }
+        response = client.post("/auth/login", data=login_data)
+        assert response.status_code == 200
 
-    token = response.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+        token = response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
 
-    task_create_response = client.post(
-        "/tasks/",
-        json={"title": "Test Task", "description": "Avatar upload"},
-        headers=headers,
-    )
-    assert task_create_response.status_code == 201
-    task_id = task_create_response.json()["id"]
+        task_create_response = client.post(
+            "/tasks/",
+            json={"title": "Test Task", "description": "Avatar upload"},
+            headers=headers,
+        )
+        assert task_create_response.status_code == 201
+        task_id = task_create_response.json()["id"]
 
-    image_bytes = _build_image_bytes()
-
-    upload_response = client.post(
-        f"/tasks/{task_id}/avatar",
-        files={"image": ("test_image.jpg", image_bytes, "image/jpeg")},
-        headers=headers,
-    )
-    assert upload_response.status_code == 200
-    assert "filepath" in upload_response.json()
+        upload_response = client.post(
+            f"/tasks/{task_id}/avatar",
+            files={"image": ("test_image.jpg", _build_image_bytes(), "image/jpeg")},
+            headers=headers,
+        )
+        assert upload_response.status_code == 200
+        assert "filepath" in upload_response.json()
