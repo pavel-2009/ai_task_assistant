@@ -1,8 +1,12 @@
 import json
 from unittest.mock import AsyncMock
 
-import numpy as np
 import pytest
+
+np = pytest.importorskip("numpy")
+pytest.importorskip("faiss")
+pytest.importorskip("redis")
+pytest.importorskip("sqlalchemy")
 
 from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.vector_db import VectorDB
