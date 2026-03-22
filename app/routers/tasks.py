@@ -8,10 +8,12 @@ from sqlalchemy import select, update, delete
 
 import typing
 import json
+import asyncio
 
 from app.models import Task, TaskGet, TaskCreate, TaskUpdate, User
 from app.db import get_async_session
 from app.auth import get_current_user
+from .nlp import _get_ner_service
 
 
 router = APIRouter(
@@ -95,7 +97,8 @@ async def update_task(
     task_id: int = Path(...),
     task_update: typing.Optional[TaskUpdate] = None,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
+    request: Request = None
 ):
     """Обновление задачи"""
 
@@ -115,17 +118,36 @@ async def update_task(
         )
 
     update_dict = task_update.model_dump(exclude_unset=True) if task_update else {}
+    
+    if not update_dict["description"] is None:
+        
+        try:
+            ner_service = _get_ner_service(request)
+            
+            new_tags = await asyncio.to_thread(ner_service.tag_task, update_dict.description)
+            
+            new_tags = json.dump(new_tags)
+            
+            update_dict["tags"] = new_tags
+        
+        except:
+            update_dict["tags"] = task.tags
+        
+    else:
+        update_dict["tags"] = task.tags
 
     await session.execute(
         update(Task).where(Task.id == task_id).values(**update_dict)
     )
+    
     await session.commit()
 
     return TaskGet(
         id=task.id,
         title=update_dict.get("title", task.title),
         description=update_dict.get("description", task.description),
-        author_id=task.author_id
+        author_id=task.author_id,
+        tags=update_dict.get("tags", task.tags)
     )
 
 

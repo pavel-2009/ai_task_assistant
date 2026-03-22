@@ -56,31 +56,19 @@ def _normalize_texts(payload: str | list[str]) -> str | list[str]:
 
 def _get_embedding_service(request: Request) -> EmbeddingService:
     embedding_service = getattr(request.app.state, "embedding_service", None)
-    if embedding_service is None:
-        raise HTTPException(
-            status_code=503,
-            detail="EmbeddingService не инициализирован. Проверьте логи приложения",
-        )
+
     return embedding_service
 
 
 def _get_semantic_search_service(request: Request) -> SemanticSearchService:
     semantic_search_service = getattr(request.app.state, "semantic_search_service", None)
-    if semantic_search_service is None:
-        raise HTTPException(
-            status_code=503,
-            detail="SemanticSearchService не инициализирован. Проверьте логи приложения",
-        )
+
     return semantic_search_service
 
 
 def _get_ner_service(request: Request) -> NerService:
     ner_service = getattr(request.app.state, "ner_service", None)
-    if ner_service is None:
-        raise HTTPException(
-            status_code=503,
-            detail="NerService не инициализирован. Проверьте логи приложения",
-        )
+
     return ner_service
 
 
@@ -88,15 +76,20 @@ def _get_ner_service(request: Request) -> NerService:
 async def get_embedding(request: Request, text: str | list[str] = Body(...)):
     """Получить эмбеддинг для текста."""
     normalized_payload = _normalize_texts(text)
+    
     embedding_service = _get_embedding_service(request)
 
     try:
         if isinstance(normalized_payload, str):
+            
             embedding = await asyncio.to_thread(embedding_service.encode_one, normalized_payload)
+            
         else:
             embedding = await asyncio.to_thread(embedding_service.encode_batch, normalized_payload)
+            
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -122,8 +115,10 @@ async def search(
 
     try:
         results = await asyncio.to_thread(semantic_search_service.search, normalized_query, top_k)
+        
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -145,8 +140,10 @@ async def index(
 
     try:
         await asyncio.to_thread(semantic_search_service.index, normalized_text)
+        
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -156,7 +153,38 @@ async def index(
 @router.post("/tag-task", description="Получить теги для текста задачи")
 async def tag_task(request: Request, text: str = Body(...)):
     """Получить теги для текста задачи."""
-    ner_service = _get_ner_service(request)
-    result = asyncio.to_thread(ner_service.tag_task, text)
-    tags = await result
-    return {"tags": tags}
+    try:
+        ner_service = _get_ner_service(request)
+        
+        if ner_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="NerService не инициализирован. Проверьте логи приложения",
+            )
+            
+        text = _normalize_text(text)
+        
+        if len(text) > 1000 or text == '':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Невалидный текст"
+            )
+        
+        try:
+            result = await asyncio.to_thread(ner_service.tag_task, text)
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Ошибка при обработке текста: {e}"
+            )
+        
+        return {
+            "tags": result
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )

@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict, Any
 
 
-
+from functools import lru_cache
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,13 @@ class NerService:
             Span.set_extension("confidence", default=0.8)
         
         logger.info(f"NER модель '{model_name}' загружена успешно.")
+        
+        
+    @property
+    def is_ready(self) -> bool:
+        """Проверяет состояние модели. Используется в healthcheck"""
+        
+        return self.nlp is not None
         
         
     def _add_special_cases(self) -> None:
@@ -79,6 +86,7 @@ class NerService:
         return list(set(results))
     
     
+    @lru_cache(maxsize=32)
     def tag_task(self, text: str) -> Dict[str, Any]:
         """Автоматическое тегирование задачи технологиями"""
         

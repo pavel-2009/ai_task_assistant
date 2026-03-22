@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI, Request, Response, status
 from redis import Redis
 import sys
 import os
@@ -58,12 +58,12 @@ async def lifespan(app: FastAPI):
         )
         app.state.semantic_search_service = semantic_search_service
         logger.info("SemanticSearchService loaded successfully")
-        
+
         logger.info("Loading NER model...")
         ner_service = NerService()
         app.state.ner_service = ner_service
         logger.info("NER model loaded successfully")
-        
+
     except Exception as exc:
         logger.error("Error during startup: %s", exc, exc_info=True)
         raise
@@ -88,7 +88,62 @@ app.include_router(streaming.router)
 app.include_router(nlp.router)
 
 
-@app.get("/ping", status_code=status.HTTP_200_OK, description="Health-check эндпоинт")
-async def ping():
-    """Health-check."""
-    return {"status": "OK"}
+def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
+    embedding_service = getattr(app.state, "embedding_service", None)
+    semantic_search_service = getattr(app.state, "semantic_search_service", None)
+    ner_service = getattr(app.state, "ner_service", None)
+    vector_db = getattr(app.state, "vector_db", None)
+
+    embedding_ready = bool(
+        embedding_service is not None
+        and getattr(embedding_service, "model", None) is not None
+        and getattr(embedding_service, "dimension", 0) > 0
+    )
+    vector_db_ready = bool(
+        vector_db is not None
+        and getattr(vector_db, "index", None) is not None
+        and getattr(vector_db, "dim", 0) > 0
+    )
+    semantic_search_ready = bool(
+        semantic_search_service is not None
+        and getattr(semantic_search_service, "embedding_service", None) is not None
+        and getattr(semantic_search_service, "vector_db", None) is not None
+    )
+    ner_ready = bool(ner_service is not None and ner_service.is_ready)
+
+    return {
+        "embedding": {
+            "ready": embedding_ready,
+            "model": "sentence-transformers/all-MiniLM-L6-v2" if embedding_service is not None else None,
+            "dimension": getattr(embedding_service, "dimension", None),
+        },
+        "vector_db": {
+            "ready": vector_db_ready,
+            "dimension": getattr(vector_db, "dim", None),
+            "indexed_items": len(getattr(vector_db, "ids", [])) if vector_db is not None else None,
+        },
+        "semantic_search": {
+            "ready": semantic_search_ready,
+            "cache_prefix": getattr(semantic_search_service, "cache_prefix", None),
+        },
+        "ner": {
+            "ready": ner_ready,
+            "model": "en_core_web_sm" if ner_service is not None else None,
+        },
+    }
+
+
+@app.get("/ping", status_code=status.HTTP_200_OK, description="Health-check endpoint")
+async def ping(request: Request, response: Response):
+    """Detailed application health-check."""
+    models = _get_model_health(request.app)
+    all_models_ready = all(component["ready"] for component in models.values())
+
+    if not all_models_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return {
+        "status": "ok" if all_models_ready else "degraded",
+        "models_ready": all_models_ready,
+        "models": models,
+    }
