@@ -1,18 +1,21 @@
 """
-Базовые CRUD-тесты для задач.
+Basic CRUD tests for tasks.
 """
 
 import uuid
 
 import pytest
 
-pytest.importorskip("fastapi")
-from fastapi.testclient import TestClient
 
-from app.main import app
+class StubNerService:
+    def tag_task(self, text: str) -> dict:
+        return {
+            "technologies": [("stub-tech", 0.9)] if text else [],
+            "confidence": 0.9 if text else 0,
+        }
 
 
-def _auth_headers(client: TestClient) -> dict[str, str]:
+def _auth_headers(client) -> dict[str, str]:
     username = f"task_user_{uuid.uuid4().hex[:8]}"
     password = "testpassword"
 
@@ -35,7 +38,12 @@ def _auth_headers(client: TestClient) -> dict[str, str]:
 
 
 def test_task_crud_flow():
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.main import app
+
     with TestClient(app) as client:
+        client.app.state.ner_service = StubNerService()
         headers = _auth_headers(client)
 
         create_payload = {

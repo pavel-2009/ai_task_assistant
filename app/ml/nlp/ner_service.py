@@ -59,6 +59,8 @@ class NerService:
             {"label": "PRODUCT", "pattern": "React.js"},
             {"label": "PRODUCT", "pattern": "Vue.js"},
             {"label": "PRODUCT", "pattern": "Angular.js"},
+            {"label": "PRODUCT", "pattern": "FastAPI"},
+            {"label": "PRODUCT", "pattern": "PostgreSQL"},
         ]
 
         ruler.add_patterns(patterns)

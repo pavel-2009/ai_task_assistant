@@ -1,12 +1,10 @@
 """
-Тесты для NERService
+Tests for NerService with lightweight fakes.
 """
 
 from types import SimpleNamespace
 
 import pytest
-
-pytest.importorskip("spacy")
 
 
 class FakeEntity:
@@ -54,17 +52,29 @@ class FakeNLP:
         return self.ruler
 
     def __call__(self, text: str):
-        return self.docs[text]
+        return self.docs.get(text, FakeDoc([]))
+
+
+class FakeSpan:
+    @staticmethod
+    def has_extension(name: str) -> bool:
+        return True
+
+    @staticmethod
+    def set_extension(name: str, default=0.8) -> None:
+        return None
 
 
 @pytest.fixture
 def ner_service(monkeypatch):
-    from app.ml.nlp.ner_service import NerService
+    pytest.importorskip("spacy")
+    import app.ml.nlp.ner_service as ner_module
 
     fake_nlp = FakeNLP()
-    monkeypatch.setattr("app.ml.nlp.ner_service.spacy.load", lambda model_name: fake_nlp)
-    monkeypatch.setattr("app.ml.nlp.ner_service.Span.has_extension", lambda name: True)
-    return NerService()
+    monkeypatch.setattr(ner_module.spacy, "load", lambda model_name: fake_nlp)
+    monkeypatch.setattr(ner_module, "Span", FakeSpan)
+
+    return ner_module.NerService()
 
 
 def test_extract_technologies_special_cases(ner_service):

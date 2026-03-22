@@ -135,7 +135,7 @@ def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
 
 @app.get("/ping", status_code=status.HTTP_200_OK, description="Health-check endpoint")
 async def ping(request: Request, response: Response):
-    """Detailed application health-check."""
+    """Информация о состоянии приложения и подключенных моделей"""
     models = _get_model_health(request.app)
     all_models_ready = all(component["ready"] for component in models.values())
 
