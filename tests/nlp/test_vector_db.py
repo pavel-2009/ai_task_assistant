@@ -1,3 +1,8 @@
+"""
+Тесты для векторной БД на FAISS.
+"""
+
+
 import json
 from unittest.mock import AsyncMock
 

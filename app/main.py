@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request, Response, status
 from redis import Redis
 import sys
 import os
+from dotenv import load_dotenv
 
 from app.celery_app import preload_models
 from app.db import REDIS_URL, close_redis
@@ -18,6 +19,8 @@ from app.ml.nlp.embedding_service import EmbeddingService
 from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.vector_db import VectorDB
 from app.ml.nlp.ner_service import NerService
+from app.ml.nlp.llm_service import LLMService
+from app.ml.nlp.rag_service import RAGService
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +66,18 @@ async def lifespan(app: FastAPI):
         ner_service = NerService()
         app.state.ner_service = ner_service
         logger.info("NER model loaded successfully")
+        
+        logger.info("Initializing LLMService...")
+        llm_service = LLMService()
+        app.state.llm_service = llm_service
+
+        logger.info("Initializing RAGService...")
+        rag_service = RAGService(
+            semantic_search=semantic_search_service,
+            llm_service=llm_service,
+            redis_client=redis_client
+        )
+        app.state.rag_service = rag_service
 
     except Exception as exc:
         logger.error("Error during startup: %s", exc, exc_info=True)
@@ -88,11 +103,20 @@ app.include_router(streaming.router)
 app.include_router(nlp.router)
 
 
-def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
+async def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
     embedding_service = getattr(app.state, "embedding_service", None)
     semantic_search_service = getattr(app.state, "semantic_search_service", None)
     ner_service = getattr(app.state, "ner_service", None)
     vector_db = getattr(app.state, "vector_db", None)
+    
+    OLLAMA_URL = os.getenv(
+            "OLLAMA_BASE_URL",
+            "http://localhost:11434"
+        )
+    OLLAMA_MODEL = os.getenv(
+            "OLLAMA_MODEL",
+            "llama3.2"
+        )
 
     embedding_ready = bool(
         embedding_service is not None
@@ -110,6 +134,8 @@ def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
         and getattr(semantic_search_service, "vector_db", None) is not None
     )
     ner_ready = bool(ner_service is not None and ner_service.is_ready)
+    llm_service = getattr(app.state, "llm_service", None)
+    rag_service = getattr(app.state, "rag_service", None)
 
     return {
         "embedding": {
@@ -130,13 +156,18 @@ def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
             "ready": ner_ready,
             "model": "en_core_web_sm" if ner_service is not None else None,
         },
+        "llm": {
+            "ready": llm_service and await llm_service.is_available(),
+            "model": OLLAMA_MODEL,
+            "url": OLLAMA_URL
+        }
     }
 
 
 @app.get("/ping", status_code=status.HTTP_200_OK, description="Health-check endpoint")
 async def ping(request: Request, response: Response):
     """Информация о состоянии приложения и подключенных моделей"""
-    models = _get_model_health(request.app)
+    models = await _get_model_health(request.app)
     all_models_ready = all(component["ready"] for component in models.values())
 
     if not all_models_ready:

@@ -1,5 +1,5 @@
 """
-Basic CRUD tests for tasks.
+Базовые тесты на CRUD задач.
 """
 
 import uuid

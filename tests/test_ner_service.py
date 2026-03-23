@@ -1,5 +1,5 @@
 """
-Tests for NerService with lightweight fakes.
+Тесты для NerService.
 """
 
 from types import SimpleNamespace

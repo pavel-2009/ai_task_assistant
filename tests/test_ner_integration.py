@@ -1,5 +1,5 @@
 """
-Integration tests for the NER service with the real spaCy model.
+Интеграционные тесты для NerService
 """
 
 import pytest
