@@ -2,11 +2,15 @@
 Сервис для управления локальной/облачной LLM моделью.
 """
 
-import ollama
+import logging
 import os
+
 from dotenv import load_dotenv
 
-import logging
+try:
+    import ollama
+except ImportError:  # pragma: no cover - зависит от окружения
+    ollama = None
 
 
 logger = logging.getLogger(__name__)
@@ -24,7 +28,7 @@ class LLMService:
             base_url if base_url else "http://localhost:11434"
         )
         
-        self.client = ollama.AsyncClient(self.url)
+        self.client = ollama.AsyncClient(self.url) if ollama is not None else None
         
         self.model = os.getenv(
             "OLLAMA_MODEL",
@@ -34,6 +38,10 @@ class LLMService:
         
     async def generate(self, prompt: str, system: str = None) -> str:
         """Запрос к LLM модели и получение полного ответа"""
+        
+        if self.client is None:
+            logger.error("Ollama client is unavailable: package 'ollama' is not installed")
+            return "Извините, LLM сервис сейчас недоступен."
         
         messages = []
         
@@ -61,6 +69,10 @@ class LLMService:
         Возвращает токены по мере генерации
         """
         
+        if self.client is None:
+            logger.error("Ollama client is unavailable: package 'ollama' is not installed")
+            return
+
         messages = []
         
         if system:
@@ -83,6 +95,9 @@ class LLMService:
         """
         Проверяет доступность Ollama и наличие модели
         """
+        if self.client is None:
+            return False
+
         try:
             response = await self.client.list()
             

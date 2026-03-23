@@ -2,15 +2,15 @@
 Сервис для Retrieval-Augmented Generation (RAG)
 """
 
-from redis.asyncio import Redis as AsyncRedis
-from typing import List, Dict, Any
 import hashlib
-
-from sqlalchemy.ext.asyncio import AsyncSession
 import json
+from typing import TYPE_CHECKING, Any, Dict, List
 
-from .llm_service import LLMService
-from .semantic_search_service import SemanticSearchService
+if TYPE_CHECKING:
+    from redis.asyncio import Redis as AsyncRedis
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from .llm_service import LLMService
+    from .semantic_search_service import SemanticSearchService
 
 
 class RAGService:
@@ -18,9 +18,9 @@ class RAGService:
     
     def __init__(
         self,
-        llm_service: LLMService,
-        semantic_search_service: SemanticSearchService,
-        redis: AsyncRedis,
+        llm_service: "LLMService",
+        semantic_search_service: "SemanticSearchService",
+        redis: "AsyncRedis | None" = None,
     ):
         self.llm_service = llm_service
         self.semantic_search_service = semantic_search_service
@@ -69,20 +69,20 @@ ID: {task.get('task_id')}"""
     async def ask(
         self,
         query: str,
-        session: AsyncSession,
+        session: "AsyncSession",
         top_k: int = 5,
         use_cache: bool = True
     ) -> Dict[str, Any]:
         """Получение ответа на вопрос с помощью RAG"""
         
+        cache_key = self._get_cache_key(query, top_k)
+
         if use_cache and self.redis_client:
-            # Получаем ключ redis
-            cache_key = self._get_cache_key(query, top_k)
-            
-            # Получаем кэшированные результаты
-            cached_response = self.redis_client.get(cache_key)
-            
+            cached_response = await self.redis_client.get(cache_key)
+
             if cached_response:
+                if isinstance(cached_response, bytes):
+                    cached_response = cached_response.decode("utf-8")
                 response = json.loads(cached_response)
                 response["cached"] = True
                 return response

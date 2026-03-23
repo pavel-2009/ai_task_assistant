@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Body, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..db import get_async_session
 from ..ml.nlp.embedding_service import EmbeddingService
 from ..ml.nlp.semantic_search_service import SemanticSearchService
 from ..ml.nlp.ner_service import NerService
@@ -105,6 +107,7 @@ async def search(
     request: Request,
     query: str = Body(..., embed=True, description="Текст запроса для поиска"),
     top_k: int = Body(5, embed=True, description="Количество результатов для возврата"),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """Поиск документов, наиболее похожих на запрос."""
     normalized_query = _normalize_text(query)
@@ -114,7 +117,7 @@ async def search(
     semantic_search_service = _get_semantic_search_service(request)
 
     try:
-        results = await asyncio.to_thread(semantic_search_service.search, normalized_query, top_k)
+        results = await semantic_search_service.search(normalized_query, session=session, top_k=top_k)
         
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -133,13 +136,14 @@ async def search(
 async def index(
     request: Request,
     text: str = Body(..., embed=True, description=""),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """Индексировать текст, добавляя его эмбеддинг в базу данных."""
     normalized_text = _normalize_text(text)
     semantic_search_service = _get_semantic_search_service(request)
 
     try:
-        await asyncio.to_thread(semantic_search_service.index, normalized_text)
+        await semantic_search_service.index(normalized_text, session=session)
         
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

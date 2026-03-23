@@ -8,13 +8,11 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response, status
-from redis import Redis
 import sys
 import os
-from dotenv import load_dotenv
 
 from app.celery_app import preload_models
-from app.db import REDIS_URL, close_redis
+from app.db import close_redis, get_redis
 from app.ml.nlp.embedding_service import EmbeddingService
 from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.vector_db import VectorDB
@@ -29,7 +27,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    redis_client: Redis | None = None
+    redis_client = None
 
     try:
         logger.info("Preloading models...")
@@ -37,7 +35,7 @@ async def lifespan(app: FastAPI):
         logger.info("Models preloaded successfully")
 
         logger.info("Connecting Redis for NLP...")
-        redis_client = Redis.from_url(REDIS_URL, decode_responses=False)
+        redis_client = await get_redis()
         app.state.redis_client = redis_client
         logger.info("Redis connected successfully")
 
@@ -49,7 +47,7 @@ async def lifespan(app: FastAPI):
 
         logger.info("Loading FAISS database...")
         vector_db = VectorDB(dim=embedding_service.dimension, redis_client=redis_client)
-        vector_db.load_from_redis()
+        await vector_db.load_from_redis()
         app.state.vector_db = vector_db
         logger.info("FAISS database loaded successfully")
 
@@ -73,9 +71,9 @@ async def lifespan(app: FastAPI):
 
         logger.info("Initializing RAGService...")
         rag_service = RAGService(
-            semantic_search=semantic_search_service,
             llm_service=llm_service,
-            redis_client=redis_client
+            semantic_search_service=semantic_search_service,
+            redis=redis_client,
         )
         app.state.rag_service = rag_service
 
@@ -86,21 +84,20 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        if redis_client is not None:
-            redis_client.close()
         await close_redis()
 
 
 app = FastAPI(lifespan=lifespan)
 
 
-from .routers import auth, avatars, nlp, streaming, tasks
+from .routers import auth, avatars, nlp, rag, streaming, tasks
 
 app.include_router(auth.router)
 app.include_router(tasks.router)
 app.include_router(avatars.router)
 app.include_router(streaming.router)
 app.include_router(nlp.router)
+app.include_router(rag.router)
 
 
 async def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
