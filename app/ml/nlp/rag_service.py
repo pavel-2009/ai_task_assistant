@@ -4,7 +4,7 @@
 
 import hashlib
 import json
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, AsyncGenerator
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis as AsyncRedis
@@ -66,11 +66,23 @@ ID: {task.get('task_id')}"""
         return f"rag:{hashlib.md5(query.encode()).hexdigest()}:{top_k}"
     
     
+    def _chunk_text(self, text: str, chunk_size: int = 5) -> List[str]:
+        """Разбивает текст на чанки по словам для имитации стриминга"""
+        
+        words = text.split()
+        chunks = []
+        
+        for i in range(0, len(words), chunk_size):
+            chunks.append(" ".join(words[i:i + chunk_size]))
+            
+        return chunks if chunks else [text]
+    
+    
     async def ask(
         self,
         query: str,
         session: "AsyncSession",
-        top_k: int = 5,
+        top_k: int = 3,
         use_cache: bool = True
     ) -> Dict[str, Any]:
         """Получение ответа на вопрос с помощью RAG"""
@@ -91,7 +103,7 @@ ID: {task.get('task_id')}"""
         
         if not tasks:
             return {
-                "answer": (
+                "message": (
                     "У меня нет информации об этом в ваших задачах. "
                     "Попробуйте переформулировать вопрос или создать задачу по этой теме."
                 ),
@@ -124,7 +136,7 @@ ID: {task.get('task_id')}"""
         )
         
         response = {
-            "answer": answer,
+            "message": answer,
             "sources": sources,
             "confidence": confidence,
             "cached": False,
@@ -139,3 +151,91 @@ ID: {task.get('task_id')}"""
             )
             
         return response
+    
+    
+    async def ask_stream(
+        self,
+        query: str,
+        session: "AsyncSession",
+        top_k: int = 3,
+        use_cache: bool = True
+    ) -> AsyncGenerator[dict, None]:
+        """Получение стримингового ответа на вопрос от RAG"""
+        
+        cache_key = self._get_cache_key(query, top_k)
+    
+        # Проверяем кэш
+        if use_cache and self.redis_client:
+            cached = await self.redis_client.get(cache_key)
+            if cached:
+                # Воспроизводим закэшированный ответ как стрим
+                response = json.loads(cached)
+                # Отдаем метаданные
+                yield {
+                    "type": "meta",
+                    "sources": response["sources"],
+                    "confidence": response["confidence"],
+                    "cached": True,
+                }
+                # Отдаем токены (разбиваем ответ на чанки)
+                for token in self._chunk_text(response["answer"]):
+                    yield {"type": "token", "content": token}
+                yield {"type": "done"}
+                return
+        
+        tasks = await self.semantic_search_service.search(query, session, top_k)
+        
+        if not tasks:
+            yield {
+                "type": "error",
+                "message": (
+                    "У меня нет информации об этом в ваших задачах. "
+                    "Попробуйте переформулировать вопрос или создать задачу по этой теме."
+                ),
+            }
+            yield {
+                "type": "done"
+            }
+            return
+
+        formatted_tasks = self._format_tasks(tasks)
+        sources = self._build_sources(tasks)
+        confidence = self._calculate_confidence(tasks)
+        
+        system_prompt = """Ты — ассистент по управлению задачами в системе AI Task Assistant.
+Отвечай ТОЛЬКО на основе информации из предоставленных задач.
+Если ответа нет в задачах — скажи "У меня нет информации об этом в ваших задачах".
+НЕ используй свои общие знания.
+В конце ответа укажи ID задач, на которые опирался."""
+
+        user_prompt = f"""Вот похожие задачи из системы:
+
+{formatted_tasks}
+
+Вопрос пользователя: {query}
+
+Ответ:"""
+
+        stream = await self.llm_service.generate_stream(prompt=user_prompt, system=system_prompt)
+        
+        try:
+            yield {
+                "type": "meta",
+                "sources": sources,
+                "confidence": confidence,
+                "cached": False,
+            }
+
+            async for chunk in stream:
+                yield {
+                    "type": "token",
+                    "content": str(chunk)
+                }
+                
+        except Exception as e:
+            
+            yield {"type": "error", "message": str(e)}
+            
+        yield {
+            "type": "done"
+        }
