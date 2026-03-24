@@ -16,7 +16,7 @@ async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 
 # Redis для кэширования и фоновых задач
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/1")
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/1")
 _redis_client = None
 
 
