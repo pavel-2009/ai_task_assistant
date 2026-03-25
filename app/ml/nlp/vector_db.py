@@ -39,6 +39,7 @@ class VectorDB:
         self.redis_client = redis_client
         self.index_key = "vector_db:faiss_index"
         self.ids_key = "vector_db:ids"
+        self.delete_cache_prefix = "vector_db:delete_cache:"
         self._lock = asyncio.Lock() # Асинхронный лок для обеспечения потокобезопасности при добавлении и поиске
 
     async def add(
@@ -241,14 +242,46 @@ class VectorDB:
         self, 
         item_id: str
     ) -> None:
-        """Удалить документ из базы данных и очистить кеш."""
-        
-        # Удаление из векторной базы и кеша
+        """Удалить документ из индекса, сохранив остальные записи через кэш Redis."""
+
         async with self._lock:
-            await self.redis_client.delete(f"{self.index_key}:{item_id}")
+            if item_id not in self.ids_to_idx:
+                return
+
+            retained_ids = [current_id for current_id in self.ids if current_id != item_id]
+            retained_vectors: dict[str, np.ndarray] = {
+                current_id: self.index.reconstruct(idx)
+                for idx, current_id in enumerate(self.ids)
+                if current_id != item_id
+            }
+
+            if self.redis_client is not None:
+                for current_id in retained_ids:
+                    cache_key = f"{self.delete_cache_prefix}{current_id}"
+                    cached_vector = await self.redis_client.get(cache_key)
+                    if cached_vector is None:
+                        await self.redis_client.set(cache_key, pickle.dumps(retained_vectors[current_id]))
+
             self.index.reset() # Сброс индекса, так как FAISS не поддерживает удаление отдельных векторов
-            if item_id in self.ids_to_idx:
-                del self.ids[self.ids_to_idx[item_id]] # Удаляем из списка ids
-            
-        self.ids_to_idx.pop(item_id, None) # Удаляем из словаря id_to_idx
+            self.ids = retained_ids
+            self.ids_to_idx = {current_id: idx for idx, current_id in enumerate(self.ids)}
+
+            vectors_to_restore: list[np.ndarray] = []
+            keys_to_cleanup: list[str] = []
+
+            for current_id in self.ids:
+                if self.redis_client is not None:
+                    cache_key = f"{self.delete_cache_prefix}{current_id}"
+                    cached_vector = await self.redis_client.get(cache_key)
+                    if cached_vector is not None:
+                        vectors_to_restore.append(pickle.loads(cached_vector))
+                        keys_to_cleanup.append(cache_key)
+                        continue
+                vectors_to_restore.append(retained_vectors[current_id])
+
+            if vectors_to_restore:
+                self.index.add(np.asarray(vectors_to_restore, dtype=np.float32))
+
+            if self.redis_client is not None and keys_to_cleanup:
+                await self.redis_client.delete(*keys_to_cleanup)
         

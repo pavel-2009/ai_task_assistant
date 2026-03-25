@@ -154,3 +154,31 @@ async def test_semantic_search_service_uses_json_cache_with_ttl():
     assert len(cache_keys) == 1
     assert redis.ttl[cache_keys[0]] == 3600
     assert json.loads(redis.store[cache_keys[0]]) == results
+
+
+@pytest.mark.asyncio
+async def test_vector_db_delete_restores_non_deleted_vectors_via_cache():
+    redis = FakeRedis()
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[None, None, FakeResult([])])
+    vector_db = VectorDB(dim=3, redis_client=redis)
+
+    await vector_db.add(
+        np.array([1.0, 0.0, 0.0], dtype=np.float32),
+        session=session,
+        item_id="task-1",
+        text="doc-1",
+    )
+    await vector_db.add(
+        np.array([0.0, 1.0, 0.0], dtype=np.float32),
+        session=session,
+        item_id="task-2",
+        text="doc-2",
+    )
+
+    await vector_db.delete("task-1")
+
+    assert vector_db.ids == ["task-2"]
+    assert vector_db.index.ntotal == 1
+    assert vector_db.ids_to_idx == {"task-2": 0}
+    assert "vector_db:delete_cache:task-2" not in redis.store
