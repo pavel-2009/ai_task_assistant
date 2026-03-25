@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 version: '0.1'
 
 volumes:
@@ -37,4 +38,45 @@ services:
     volumes:
       - ./avatars:/app/avatars
       - ./checkpoints:/app/checkpoints
+=======
+version: '0.1'
+
+volumes:
+  torch_cache:
+
+services:
+  api:
+    build: .
+    container_name: ai_task_assistant
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./avatars:/app/avatars
+      - ./checkpoints:/app/checkpoints
+      - ./test.db:/app/test.db
+      - torch_cache:/root/.cache/torch
+
+    env_file:
+      - .env
+
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  redis:
+    image: redis:latest
+    container_name: ai_task_assistant_redis
+    ports:
+      - "6379:6379"
+    
+  celery:
+    build: .
+    container_name: ai_task_assistant_celery
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    command: celery -A app.ml.tasks worker --loglevel=info
+    volumes:
+      - ./avatars:/app/avatars
+      - ./checkpoints:/app/checkpoints
+>>>>>>> parent of cf2a42f (need to test RAG streaming)
       - torch_cache:/root/.cache/torch
