@@ -77,6 +77,11 @@ class SemanticSearchService:
         await self._save_to_cache(cache_key, sorted_docs)
         
         return sorted_docs
+    
+    async def delete(self, item_id: str, session: AsyncSession) -> None:
+        """Удалить документ из базы данных и очистить кеш."""
+        await self.vector_db.delete(item_id, session=session)
+        await self.clear_cache()
 
     def _get_cache_key(self, query: str, top_k: int) -> str:
         """Генерировать уникальный ключ для кеша."""

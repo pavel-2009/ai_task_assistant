@@ -14,13 +14,27 @@ from app.ml.cv.classification.inference_service import InferenceService
 from app.ml.cv.detection.yolo_service import YoloService
 from app.ml.cv.segmentation.segmentation_service import SegmentationService
 from app.ml.cv.detection.yolo_onnx_service import YoloONNXService
+from app.ml.nlp.rag_service import RAGService
+from app.ml.nlp.vector_db import VectorDB
+from app.ml.nlp.ner_service import NerService
+from app.ml.nlp.semantic_search_service import SemanticSearchService
+from app.ml.nlp.embedding_service import EmbeddingService
 
 
 load_dotenv()
 
 
 # Кэш для моделей и executor для асинхронной загрузки
-_models_cache = {"inference": None, "yolo": None, "segmentation": None}
+_models_cache = {
+    "inference": None,
+    "yolo": None,
+    "segmentation": None,
+    "rag": None,
+    "vectordb": None,
+    "semantic_search": None,
+    "ner": None,
+    "embedding": None
+}
 _executor = ThreadPoolExecutor(max_workers=3)
 
 
@@ -55,6 +69,36 @@ def get_segmentation_service() -> SegmentationService:
     return _models_cache["segmentation"]
 
 
+def get_rag_service():
+    if _models_cache["rag"] is None:
+        _models_cache["rag"] = RAGService()
+    return _models_cache["rag"]
+
+
+def get_vector_db():
+    if _models_cache["vectordb"] is None:
+        _models_cache["vectordb"] = VectorDB()
+    return _models_cache["vectordb"]
+
+
+def get_semantic_search_service():
+    if _models_cache["semantic_search"] is None:
+        _models_cache["semantic_search"] = SemanticSearchService()
+    return _models_cache["semantic_search"]
+
+
+def get_ner_service():
+    if _models_cache["ner"] is None:
+        _models_cache["ner"] = NerService()
+    return _models_cache["ner"]
+
+
+def get_embedding_service():
+    if _models_cache["embedding"] is None:
+        _models_cache["embedding"] = EmbeddingService()
+    return _models_cache["embedding"]
+
+
 async def preload_models():
     """Загрузка всех моделей при старте приложения в фоновом режиме"""
     loop = asyncio.get_event_loop()
@@ -62,7 +106,12 @@ async def preload_models():
     tasks = [
         loop.run_in_executor(_executor, get_inference_service),
         loop.run_in_executor(_executor, get_yolo_service),
-        loop.run_in_executor(_executor, get_segmentation_service)
+        loop.run_in_executor(_executor, get_segmentation_service),
+        loop.run_in_executor(_executor, get_rag_service),
+        loop.run_in_executor(_executor, get_vector_db),
+        loop.run_in_executor(_executor, get_semantic_search_service),
+        loop.run_in_executor(_executor, get_ner_service),
+        loop.run_in_executor(_executor, get_embedding_service)
     ]
     
     await asyncio.gather(*tasks)
@@ -73,7 +122,10 @@ celery_app = Celery(
     "ai_task_assistant",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
-    include=["app.ml.cv.tasks"]
+    include=[
+        "app.ml.cv.tasks",
+        "app.ml.nlp.tasks"
+    ]
 )
 
 celery_app.conf.update(

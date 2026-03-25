@@ -5,6 +5,7 @@
 from fastapi import APIRouter, status, Depends, HTTPException, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
+import celery
 
 import typing
 import json
@@ -14,6 +15,7 @@ from app.models import Task, TaskGet, TaskCreate, TaskUpdate, User
 from app.db import get_async_session
 from app.auth import get_current_user
 from .nlp import _get_ner_service
+from app.ml.nlp.tasks import process_task_tags_and_embedding
 
 
 router = APIRouter(
@@ -54,18 +56,43 @@ async def create_task(
     
     task = Task(**task.model_dump())
     task.author_id = current_user.id
+    task.tags = None  # Изначально теги не установлены, они будут обработаны в фоне
     
-    if task.description:
-        ner_service = request.app.state.ner_service
-        ner_result = ner_service.tag_task(task.description)
-        task.tags = json.dumps(ner_result)  # Сохранение тегов в виде JSON строки
-
+    # Запускаем фоновую задачу для обработки тегов и эмбеддингов
+    process_task_tags_and_embedding.delay(
+        task_id=task.id,
+        title=task.title,
+        description=task.description
+    )
+    
     session.add(task)
     await session.commit()
 
     await session.refresh(task)
 
     return task
+
+
+@router.get("/tasks/{task_id}/tags_status", status_code=status.HTTP_200_OK, description="Проверка статуса обработки тегов задачи")
+async def check_tags_status(
+    task_id: int = Path(...),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Проверка статуса обработки тегов задачи"""
+
+    task = await session.execute(select(Task).where(Task.id == task_id))
+    task = task.scalar_one_or_none()
+
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Задача с указанным ID не найдена"
+        )
+
+    return {
+        "tags": task.tags,
+        "is_processing": task.tags is None
+    }
 
 
 @router.get("/{task_id}", status_code=status.HTTP_200_OK, description="Получение задачи по ID")
@@ -119,22 +146,15 @@ async def update_task(
 
     update_dict = task_update.model_dump(exclude_unset=True) if task_update else {}
     
-    if not update_dict["description"] is None:
+    if "title" in update_dict or "description" in update_dict:
+        # Если обновляются title или description, нужно заново обработать теги и эмбеддинги
+        process_task_tags_and_embedding.delay(
+            task_id=task.id,
+            title=update_dict.get("title", task.title),
+            description=update_dict.get("description", task.description)
+        )
         
-        try:
-            ner_service = _get_ner_service(request)
-            
-            new_tags = await asyncio.to_thread(ner_service.tag_task, update_dict.description)
-            
-            new_tags = json.dump(new_tags)
-            
-            update_dict["tags"] = new_tags
-        
-        except:
-            update_dict["tags"] = task.tags
-        
-    else:
-        update_dict["tags"] = task.tags
+        update_dict["tags"] = None  # Сбрасываем теги, они будут обновлены в фоне
 
     await session.execute(
         update(Task).where(Task.id == task_id).values(**update_dict)
@@ -154,6 +174,7 @@ async def update_task(
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT, description="Удаление задачи")
 async def delete_task(
     task_id: int = Path(...),
+    request: Request = None,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session)
 ):
@@ -177,6 +198,11 @@ async def delete_task(
     await session.execute(
         delete(Task).where(Task.id == task_id)
     )
+    
+    # Удаляем данные из векторной базы и семантического поиска
+    semantic_search_service = request.app.state.semantic_search_service
+    await semantic_search_service.delete(item_id=task_id, session=session)
+    
     await session.commit()
     
     return None

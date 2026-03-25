@@ -11,6 +11,8 @@ from fastapi import FastAPI, Request, Response, status
 import sys
 import os
 
+from .ml.nlp.tasks import reindex_tasks
+
 from app.celery_app import preload_models
 from app.db import close_redis, get_redis
 from app.ml.nlp.embedding_service import EmbeddingService
@@ -76,6 +78,11 @@ async def lifespan(app: FastAPI):
             redis=redis_client,
         )
         app.state.rag_service = rag_service
+        logger.info("RAGService initialized successfully")
+        
+        logger.info("Starting background task for reindexing...")
+        reindex_tasks.delay()
+        logger.info("Background task for reindexing started successfully")
 
     except Exception as exc:
         logger.error("Error during startup: %s", exc, exc_info=True)
@@ -157,6 +164,10 @@ async def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
             "ready": llm_service and await llm_service.is_available(),
             "model": OLLAMA_MODEL,
             "url": OLLAMA_URL
+        },
+        "rag": {
+            "ready": rag_service is not None,
+            "llm_model": OLLAMA_MODEL if rag_service is not None else None,
         }
     }
 

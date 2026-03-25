@@ -190,3 +190,18 @@ class VectorDB:
             return bool(index_bytes or ids_bytes)
         except Exception:
             return False
+        
+    async def delete(
+        self, 
+        item_id: str
+    ) -> None:
+        """Удалить документ из базы данных и очистить кеш."""
+        
+        # Удаление из векторной базы и кеша
+        async with self._lock:
+            if item_id in self.ids:
+                idx = self.ids.index(item_id)
+                self.index.remove_ids(np.array([idx], dtype=np.int64))
+                self.ids.pop(idx)
+        
+        await self.clear_cache()
