@@ -201,7 +201,7 @@ async def delete_task(
     
     # Удаляем данные из векторной базы и семантического поиска
     semantic_search_service = request.app.state.semantic_search_service
-    await semantic_search_service.delete(item_id=task_id, session=session)
+    await semantic_search_service.delete(item_id=str(task_id), session=session)
     
     await session.commit()
     

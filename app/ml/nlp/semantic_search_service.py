@@ -55,6 +55,22 @@ class SemanticSearchService:
         await self.clear_cache()
         
         return resolved_item_id
+    
+    def index_sync(self, text: str, session: AsyncSession, item_id: str | None = None) -> str:
+        """Синхронный метод для индексирования текста, добавляя его эмбеддинг в базу данных."""
+        
+        normalized_text = self._normalize_text(text, "Текст для индексирования")
+        
+        embedding = self.embedding_service.encode_one(normalized_text)
+        
+        resolved_item_id = self.vector_db.add_sync(
+            embedding, session=session, item_id=item_id, text=normalized_text
+        )
+        
+        self.vector_db.save_to_redis_sync()
+        self.clear_cache_sync()
+        
+        return resolved_item_id
 
     async def search(self, query: str, session: AsyncSession, top_k: int = 5) -> list[dict]:
         """Искать документы, наиболее похожие на запрос."""

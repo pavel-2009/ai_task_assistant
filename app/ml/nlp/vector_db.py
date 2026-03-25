@@ -30,6 +30,7 @@ class VectorDB:
         self.dim = dim # Размерность эмбеддингов
         self.index = faiss.IndexFlatIP(dim) # Индекс для поиска по косинусной близости (нормализованные векторы)
         self.ids: list[str] = []
+        self.ids_to_idx: dict[str, int] = {} # Словарь для быстрого поиска индекса по item_id
         self.redis_client = redis_client
         self.index_key = "vector_db:faiss_index"
         self.ids_key = "vector_db:ids"
@@ -63,6 +64,8 @@ class VectorDB:
         await session.execute(
             insert(Text).values(text_id=resolved_item_id, text=text)
         )
+        
+        self.ids_to_idx[resolved_item_id] = len(self.ids) - 1
         
         return resolved_item_id
     
@@ -105,6 +108,9 @@ class VectorDB:
                     {"text_id": item_id, "text": text} for item_id, text in zip(resolved_item_ids, texts)
                 ])
             )
+            
+        for item_id in resolved_item_ids:
+            self.ids_to_idx[item_id] = len(self.ids) - batch_size + resolved_item_ids.index(item_id)
         
         return resolved_item_ids
 
@@ -199,9 +205,6 @@ class VectorDB:
         
         # Удаление из векторной базы и кеша
         async with self._lock:
-            if item_id in self.ids:
-                idx = self.ids.index(item_id)
-                self.index.remove_ids(np.array([idx], dtype=np.int64))
-                self.ids.pop(idx)
+            self.ids_to_idx.pop(item_id, None)
         
         await self.clear_cache()
