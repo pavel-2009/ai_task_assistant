@@ -139,3 +139,45 @@ ID: {task.get('task_id')}"""
             )
             
         return response
+
+
+    async def ask_stream(
+        self,
+        query: str,
+        session: "AsyncSession",
+        top_k: int = 5,
+    ):
+        """Потоковое получение ответа на вопрос с помощью RAG."""
+
+        tasks = await self.semantic_search_service.search(query, session, top_k)
+
+        if not tasks:
+            fallback = (
+                "У меня нет информации об этом в ваших задачах. "
+                "Попробуйте переформулировать вопрос или создать задачу по этой теме."
+            )
+            for chunk in fallback.split():
+                yield f"{chunk} "
+            return
+
+        formatted_tasks = self._format_tasks(tasks)
+
+        system_prompt = """Ты — ассистент по управлению задачами в системе AI Task Assistant.
+Отвечай ТОЛЬКО на основе информации из предоставленных задач.
+Если ответа нет в задачах — скажи "У меня нет информации об этом в ваших задачах".
+НЕ используй свои общие знания.
+В конце ответа укажи ID задач, на которые опирался."""
+
+        user_prompt = f"""Вот похожие задачи из системы:
+
+{formatted_tasks}
+
+Вопрос пользователя: {query}
+
+Ответ:"""
+
+        async for token in self.llm_service.generate_stream(
+            prompt=user_prompt,
+            system=system_prompt,
+        ):
+            yield token
