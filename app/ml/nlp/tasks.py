@@ -9,10 +9,8 @@ from sqlalchemy.orm import sessionmaker
 
 import json
 
-from app.celery_app import celery_app, get_ner_service, get_semantic_search_service
-
-from app.ml.nlp.ner_service import NerService
-from app.ml.nlp.semantic_search_service import SemanticSearchService
+from app.celery_app import celery_app
+from app.services import get_ner, get_semantic_search
 
 from app.models import Task, Text
 
@@ -25,12 +23,12 @@ SyncSession = sessionmaker(sync_engine)
 def process_task_tags_and_embedding(task_id: int, title: str, description: str):
     """Фоновая задача для обработки тегов и эмбеддингов задачи."""
     
-    ner_service: NerService = get_ner_service()
+    ner_service = get_ner()
     
     text = f"{title}\n{description}"
     tags_result = ner_service.tag_task(text)
 
-    semantic_search_service: SemanticSearchService = get_semantic_search_service()
+    semantic_search_service = get_semantic_search()
     session = SyncSession()
     
     session.execute(
@@ -57,12 +55,12 @@ def process_task_tags_and_embedding(task_id: int, title: str, description: str):
 def reindex_tasks():
     """Фоновая задача для реиндексации задач при старте приложения."""
     
-    semantic_search_service = get_semantic_search_service()
+    semantic_search_service = get_semantic_search()
     
     session = SyncSession()
     
-    tasks = session.execute(select(Task.id, Task.title, Task.description)).all()
-    tasks = tasks.scalars()
+    tasks = session.execute(select(Task.id, Task.title, Task.description))
+    tasks = tasks.scalars().all()
     
     for task in tasks:
         text = f"{task.title}\n{task.description}"

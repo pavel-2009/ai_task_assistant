@@ -94,9 +94,9 @@ class SemanticSearchService:
         
         return sorted_docs
     
-    async def delete(self, item_id: str, session: AsyncSession) -> None:
+    async def delete(self, item_id: str) -> None:
         """Удалить документ из базы данных и очистить кеш."""
-        await self.vector_db.delete(item_id, session=session)
+        await self.vector_db.delete(item_id)
         await self.clear_cache()
 
     def _get_cache_key(self, query: str, top_k: int) -> str:

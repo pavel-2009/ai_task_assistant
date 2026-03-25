@@ -58,17 +58,18 @@ async def create_task(
     task.author_id = current_user.id
     task.tags = None  # Изначально теги не установлены, они будут обработаны в фоне
     
+    
+    session.add(task)
+    await session.commit()
+
+    await session.refresh(task)
+    
     # Запускаем фоновую задачу для обработки тегов и эмбеддингов
     process_task_tags_and_embedding.delay(
         task_id=task.id,
         title=task.title,
         description=task.description
     )
-    
-    session.add(task)
-    await session.commit()
-
-    await session.refresh(task)
 
     return task
 

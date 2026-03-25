@@ -2,7 +2,8 @@
 Асинхронные задачи для обработки изображений с помощью модели YOLO.
 """
 
-from app.celery_app import celery_app, get_inference_service, get_segmentation_service, get_yolo_service
+from app.celery_app import celery_app
+from app.services import get_inference, get_segmentation, get_yolo
 
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from pathlib import Path
 def predict_avatar_class(task_id: int, image_path: str) -> dict:
     """Фоновая задача для предсказания класса аватарки задачи."""
     
-    inference_service = get_inference_service()
+    inference_service = get_inference()
     
     with open(image_path, "rb") as f:
         image_bytes = f.read()
@@ -25,7 +26,7 @@ def predict_avatar_class(task_id: int, image_path: str) -> dict:
 def detect_and_visualize_task(task_id: int, image_path: str) -> dict:
     """Фоновая задача для обнаружения объектов на изображении и сохранения визуализации."""
     
-    yolo_service = get_yolo_service()
+    yolo_service = get_yolo()
     
     with open(image_path, "rb") as f:
         image_bytes = f.read()
@@ -39,7 +40,7 @@ def detect_and_visualize_task(task_id: int, image_path: str) -> dict:
 def segment_image_task(task_id: int, image_path: str) -> bytes:
     """Фоновая задача для сегментации изображения."""
     
-    segmentation_service = get_segmentation_service()
+    segmentation_service = get_segmentation()
     
     try:
         with open(image_path, "rb") as f:

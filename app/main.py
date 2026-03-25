@@ -13,14 +13,17 @@ import os
 
 from .ml.nlp.tasks import reindex_tasks
 
-from app.celery_app import preload_models
 from app.db import close_redis, get_redis
-from app.ml.nlp.embedding_service import EmbeddingService
-from app.ml.nlp.semantic_search_service import SemanticSearchService
-from app.ml.nlp.vector_db import VectorDB
-from app.ml.nlp.ner_service import NerService
-from app.ml.nlp.llm_service import LLMService
-from app.ml.nlp.rag_service import RAGService
+from app.services import (
+    init_services,
+    get_embedding,
+    get_ner,
+    get_vector_db,
+    get_semantic_search,
+    get_llm,
+    get_rag,
+)
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -32,53 +35,32 @@ async def lifespan(app: FastAPI):
     redis_client = None
 
     try:
-        logger.info("Preloading models...")
-        await preload_models()
-        logger.info("Models preloaded successfully")
-
-        logger.info("Connecting Redis for NLP...")
+        logger.info("Connecting Redis...")
         redis_client = await get_redis()
         app.state.redis_client = redis_client
         logger.info("Redis connected successfully")
 
-        logger.info("Initializing EmbeddingService...")
-        embedding_service = EmbeddingService()
-        app.state.embedding_service = embedding_service
-        embedding_service.encode_one("Test embedding to warm up the model")
-        logger.info("EmbeddingService initialized successfully")
-
-        logger.info("Loading FAISS database...")
-        vector_db = VectorDB(dim=embedding_service.dimension, redis_client=redis_client)
-        await vector_db.load_from_redis()
-        app.state.vector_db = vector_db
-        logger.info("FAISS database loaded successfully")
-
-        logger.info("Loading SemanticSearchService...")
-        semantic_search_service = SemanticSearchService(
-            embedding_service=embedding_service,
-            vector_db=vector_db,
-            redis_client=redis_client,
-        )
-        app.state.semantic_search_service = semantic_search_service
-        logger.info("SemanticSearchService loaded successfully")
-
-        logger.info("Loading NER model...")
-        ner_service = NerService()
-        app.state.ner_service = ner_service
-        logger.info("NER model loaded successfully")
+        logger.info("Initializing all services...")
         
-        logger.info("Initializing LLMService...")
-        llm_service = LLMService()
-        app.state.llm_service = llm_service
-
-        logger.info("Initializing RAGService...")
-        rag_service = RAGService(
-            llm_service=llm_service,
-            semantic_search_service=semantic_search_service,
-            redis=redis_client,
+        inference_checkpoint_path = Path(__file__).parent.parent / "checkpoints" / "model.pth"
+        inference_idx_to_class = {0: "cat", 1: "dog", 2: "house"}
+        use_onnx = os.getenv("USE_ONNX", "False").lower() in ("true", "1", "t")
+        
+        await init_services(
+            use_onnx=use_onnx,
+            redis_client=redis_client,
+            inference_checkpoint_path=str(inference_checkpoint_path),
+            inference_idx_to_class=inference_idx_to_class,
         )
-        app.state.rag_service = rag_service
-        logger.info("RAGService initialized successfully")
+        logger.info("All services initialized successfully")
+
+        # Сохраняем сервисы в app.state для доступа в роутерах
+        app.state.embedding_service = get_embedding()
+        app.state.ner_service = get_ner()
+        app.state.vector_db = get_vector_db()
+        app.state.semantic_search_service = get_semantic_search()
+        app.state.llm_service = get_llm()
+        app.state.rag_service = get_rag()
         
         logger.info("Starting background task for reindexing...")
         reindex_tasks.delay()
