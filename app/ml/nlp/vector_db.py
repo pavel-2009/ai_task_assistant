@@ -205,6 +205,10 @@ class VectorDB:
         
         # Удаление из векторной базы и кеша
         async with self._lock:
-            self.ids_to_idx.pop(item_id, None)
+            await self.redis_client.delete(f"{self.index_key}:{item_id}")
+            self.index.reset() # Сброс индекса, так как FAISS не поддерживает удаление отдельных векторов
+            if item_id in self.ids_to_idx:
+                del self.ids[self.ids_to_idx[item_id]] # Удаляем из списка ids
+            
+        self.ids_to_idx.pop(item_id, None) # Удаляем из словаря id_to_idx
         
-        await self.clear_cache()

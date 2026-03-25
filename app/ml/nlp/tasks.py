@@ -37,7 +37,7 @@ def process_task_tags_and_embedding(task_id: int, title: str, description: str):
         update(Task).where(Task.id == task_id).values(tags=json.dumps(tags_result))
     )
     
-    semantic_search_service.index(
+    semantic_search_service.index_sync(
         text=text,
         session=session,
         item_id=task_id,
@@ -62,7 +62,7 @@ def reindex_tasks():
     session = SyncSession()
     
     tasks = session.execute(select(Task.id, Task.title, Task.description)).all()
-    tasks = tasks.scalars().all()
+    tasks = tasks.scalars()
     
     for task in tasks:
         text = f"{task.title}\n{task.description}"
