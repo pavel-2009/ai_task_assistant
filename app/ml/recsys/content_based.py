@@ -1,0 +1,134 @@
+"""
+Сервис для работы с контентной рекомендательной системой. В данном случае - для получения эмбеддингов изображений и текстовых описаний, которые затем можно использовать для поиска похожих задач.
+"""
+
+import numpy as np
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from pathlib import Path
+
+from app.ml.cv.embedding.image_embedding_service import ImageEmbeddingService
+from app.ml.nlp.embedding_service import EmbeddingService
+from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
+from app.models import Task
+
+
+class ContentBasedRecommender:
+    """Сервис для контентной рекомендательной системы."""
+    
+    
+    def __init__(
+        self,
+        image_embedding_service: ImageEmbeddingService = None,
+        text_embedding_service: EmbeddingService = None,
+        image_vector_db: RecSysVectorDB = None
+    ):
+        self.image_embedding_service: ImageEmbeddingService = image_embedding_service or ImageEmbeddingService()
+        self.text_embedding_service: EmbeddingService = text_embedding_service or EmbeddingService()
+        self.image_vector_db: RecSysVectorDB = image_vector_db or RecSysVectorDB(dim=512)  # Пример размерности, заменить на реальную
+
+
+    async def _get_image_embedding(self, image: str):
+        """Получаем эмбеддинг для изображения."""
+        
+        image_path = Path(image)
+        
+        if not image_path.is_file():
+            raise ValueError(f"Файл изображения {image} не найден")
+        
+        with image_path.open("rb") as f:
+            image_bytes = f.read()
+        
+        return self.image_embedding_service.get_embedding(image_bytes)
+    
+    
+    async def _get_text_embedding(self, text: str):
+        """Получаем эмбеддинг для текстового описания."""
+        return self.text_embedding_service.get_embedding(text)
+    
+    
+    async def _get_task_embedding(self, image: str, text: str):
+        """Получаем объединенный эмбеддинг для задачи на основе изображения и текста."""
+        image_emb = await self._get_image_embedding(image)
+        text_emb = await self._get_text_embedding(text)
+        
+        # Объединяем эмбеддинги (можно использовать разные методы, например, конкатенацию или усреднение)
+        combined_emb = np.concatenate([image_emb, text_emb])
+        
+        return combined_emb
+    
+    
+    async def _get_task(
+        self,
+        task_id: int,
+        session: AsyncSession
+    ) -> dict:
+        """Получаем данные задачи из базы данных."""
+        
+        task = await session.execute(select(Task).where(Task.id == task_id))
+        task = task.scalar_one_or_none()
+        
+        if not task:
+            raise ValueError(f"Задача с ID {task_id} не найдена")
+        
+        return {
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "avatar_file": task.avatar_file,
+            "tags": task.tags
+        }
+    
+    async def _find_similar_tasks(
+        self,
+        task_embedding: np.ndarray,
+        session: AsyncSession,
+        top_k: int = 5
+    ) -> list[dict]:
+        """Находим похожие задачи на основе эмбеддингов."""
+        
+        # Ищем похожие задачи в векторной базе данных изображений
+        tasks = await self.image_vector_db.search(task_embedding, top_k=top_k)
+        if not tasks:
+            return []
+        
+        # Получаем данные похожих задач из базы данных
+        similar_tasks = []
+        
+        for task_id in tasks:
+            task = await session.execute(select(Task).where(Task.id == int(task_id)))
+            task = task.scalar_one_or_none()
+            if task:
+                similar_tasks.append({
+                    "id": task.id,
+                    "title": task.title,
+                    "description": task.description,
+                    "avatar_file": task.avatar_file,
+                    "tags": task.tags
+                })
+        
+        return similar_tasks
+
+
+    async def recommend(
+        self,
+        task_id: int,
+        session: AsyncSession
+    ) -> list[dict]:
+        """Рекомендуем похожие задачи на основе эмбеддингов."""
+
+        task = await self._get_task(task_id, session)
+        
+        # Получаем эмбеддинг для текущей задачи
+        task_emb = await self._get_task_embedding(
+            image=task["avatar_file"],  # Предполагается, что avatar_file содержит путь к изображению
+            text=task["description"]  # Предполагается, что description содержит текстовое описание
+        )
+        
+        # Находим похожие задачи
+        similar_tasks = await self._find_similar_tasks(task_emb, session)
+        
+        return similar_tasks
+        

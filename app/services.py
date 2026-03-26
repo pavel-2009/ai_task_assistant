@@ -9,12 +9,16 @@ from app.ml.cv.classification.inference_service import InferenceService
 from app.ml.cv.detection.yolo_service import YoloService
 from app.ml.cv.detection.yolo_onnx_service import YoloONNXService
 from app.ml.cv.segmentation.segmentation_service import SegmentationService
+from app.ml.cv.embedding.image_embedding_service import ImageEmbeddingService
 from app.ml.nlp.rag_service import RAGService
 from app.ml.nlp.vector_db import VectorDB
 from app.ml.nlp.ner_service import NerService
 from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.embedding_service import EmbeddingService
 from app.ml.nlp.llm_service import LLMService
+from app.ml.recsys.content_based import ContentBasedRecommender
+from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
+
 
 import redis.asyncio as redis
 
@@ -36,6 +40,8 @@ async def init_services(
         idx_to_class=inference_idx_to_class or {}
     )
     
+    _services["image_embedding"] = ImageEmbeddingService()
+    
     if use_onnx:
         _services["yolo"] = YoloONNXService()
     else:
@@ -54,6 +60,16 @@ async def init_services(
         redis_client=redis_client
     )
     
+    # Рекомендательная система
+    _services["recsys_vector_db"] = RecSysVectorDB(dim=512, redis_client=redis_client)  # Пример размерности, заменить на реальную
+    
+    _services["content_based_recommender"] = ContentBasedRecommender(
+        image_embedding_service=_services["image_embedding"],
+        text_embedding_service=_services["embedding"],
+        image_vector_db=_services["recsys_vector_db"]
+    )
+
+
     if redis_client:
         await _services["vector_db"].load_from_redis()
     
@@ -85,34 +101,35 @@ def get_service(name: str) -> object:
 def get_inference() -> InferenceService:
     return get_service("inference")
 
-
 def get_yolo() -> YoloService | YoloONNXService:
     return get_service("yolo")
-
 
 def get_segmentation() -> SegmentationService:
     return get_service("segmentation")
 
+def get_image_embedding() -> ImageEmbeddingService:
+    return get_service("image_embedding")
 
 def get_embedding() -> EmbeddingService:
     return get_service("embedding")
 
-
 def get_ner() -> NerService:
     return get_service("ner")
-
 
 def get_llm() -> LLMService:
     return get_service("llm")
 
-
 def get_vector_db() -> VectorDB:
     return get_service("vector_db")
-
 
 def get_semantic_search() -> SemanticSearchService:
     return get_service("semantic_search")
 
-
 def get_rag() -> RAGService:
     return get_service("rag")
+
+def get_content_based_recommender() -> ContentBasedRecommender:
+    return get_service("content_based_recommender")
+
+def get_recsys_vector_db() -> RecSysVectorDB:
+    return get_service("recsys_vector_db")

@@ -259,6 +259,7 @@ class VectorDB:
                 for current_id in retained_ids:
                     cache_key = f"{self.delete_cache_prefix}{current_id}"
                     cached_vector = await self.redis_client.get(cache_key)
+                    
                     if cached_vector is None:
                         await self.redis_client.set(cache_key, pickle.dumps(retained_vectors[current_id]))
 
@@ -271,12 +272,16 @@ class VectorDB:
 
             for current_id in self.ids:
                 if self.redis_client is not None:
+                    
                     cache_key = f"{self.delete_cache_prefix}{current_id}"
                     cached_vector = await self.redis_client.get(cache_key)
+                    
                     if cached_vector is not None:
                         vectors_to_restore.append(pickle.loads(cached_vector))
                         keys_to_cleanup.append(cache_key)
+                        
                         continue
+                    
                 vectors_to_restore.append(retained_vectors[current_id])
 
             if vectors_to_restore:
