@@ -13,7 +13,7 @@ import redis
 from app.ml.cv.embedding.image_embedding_service import ImageEmbeddingService
 from app.ml.nlp.embedding_service import EmbeddingService
 from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
-from app.models import Task
+from app.db_models import Task
 
 
 class ContentBasedRecommender:

@@ -11,7 +11,8 @@ import typing
 import json
 import asyncio
 
-from app.models import Task, TaskGet, TaskCreate, TaskUpdate, User
+from app.db_models import Task, User
+from app.schemas import TaskCreate, TaskGet, TaskUpdate
 from app.db import get_async_session
 from app.auth import get_current_user
 from .nlp import _get_ner_service

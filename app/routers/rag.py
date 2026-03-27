@@ -4,10 +4,11 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_async_session
+from ..error_handlers import AppError
+from ..schemas import AskRequest
 
 
 router = APIRouter(
@@ -15,11 +16,6 @@ router = APIRouter(
     tags=['RAG']
 )
 
-
-class AskRequest(BaseModel):
-    query: str = Field(..., min_length=1)
-    top_k: int = Field(default=3, ge=1, le=10)
-    use_cache: bool = True
 
 
 @router.post("/ask")
@@ -47,12 +43,8 @@ async def ask(
             body.use_cache
         )
         return result
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+    except Exception as exc:
+        raise AppError("Ошибка при обработке RAG запроса", status_code=500) from exc
 
 
 @router.post("/ask/stream")
@@ -82,8 +74,8 @@ async def ask_stream(
                 yield f"data: {token}\n\n"
 
             yield "event: done\ndata: [DONE]\n\n"
-        except Exception as e:
-            yield f"event: error\ndata: {str(e)}\n\n"
+        except Exception:
+            yield "event: error\ndata: Внутренняя ошибка сервера\n\n"
 
     return StreamingResponse(
         event_generator(),

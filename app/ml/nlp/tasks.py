@@ -15,7 +15,7 @@ import torch
 from app.celery_app import celery_app
 from app.services import get_ner, get_semantic_search, get_embedding, get_recsys_vector_db, get_image_embedding
 
-from app.models import Task, Text
+from app.db_models import Task, Text
 from app.ml.nlp.embedding_service import EmbeddingService
 from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
 from app.ml.cv.embedding.image_embedding_service import ImageEmbeddingService
