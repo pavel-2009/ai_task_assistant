@@ -27,11 +27,17 @@ class ContentBasedRecommender:
     ):
         self.image_embedding_service: ImageEmbeddingService = image_embedding_service or ImageEmbeddingService()
         self.text_embedding_service: EmbeddingService = text_embedding_service or EmbeddingService()
-        self.image_vector_db: RecSysVectorDB = image_vector_db or RecSysVectorDB(dim=512)  # Пример размерности, заменить на реальную
+        self.recsys_vector_db: RecSysVectorDB = image_vector_db or RecSysVectorDB(dim=896)
 
 
     async def _get_image_embedding(self, image: str):
         """Получаем эмбеддинг для изображения."""
+        
+        # Проверяем кэш
+        cache_key = f"img_emb:{image}"
+        cached_emb = await self.recsys_vector_db.redis_client.get(cache_key)
+        if cached_emb is not None:
+            return np.frombuffer(cached_emb, dtype=np.float32)
         
         image_path = Path(image)
         
@@ -40,8 +46,11 @@ class ContentBasedRecommender:
         
         with image_path.open("rb") as f:
             image_bytes = f.read()
+            
+        # Добавляем в кэш
+        embedding = self.image_embedding_service.get_embedding(image_bytes)
         
-        return self.image_embedding_service.get_embedding(image_bytes)
+        return embedding
     
     
     async def _get_text_embedding(self, text: str):
@@ -51,11 +60,22 @@ class ContentBasedRecommender:
     
     async def _get_task_embedding(self, image: str, text: str):
         """Получаем объединенный эмбеддинг для задачи на основе изображения и текста."""
+        
+        # Проверяем кэш
+        cache_key = f"task_emb:{image}:{text}"
+        cached_emb = await self.recsys_vector_db.redis_client.get(cache_key)
+        
+        if cached_emb is not None:
+            return np.frombuffer(cached_emb, dtype=np.float32)
+        
         image_emb = await self._get_image_embedding(image)
         text_emb = await self._get_text_embedding(text)
         
         # Объединяем эмбеддинги (можно использовать разные методы, например, конкатенацию или усреднение)
         combined_emb = np.concatenate([image_emb, text_emb])
+        
+        # Сохраняем в кэш
+        await self.recsys_vector_db.redis_client.set(cache_key, combined_emb.tobytes())
         
         return combined_emb
     
@@ -85,37 +105,42 @@ class ContentBasedRecommender:
         self,
         task_embedding: np.ndarray,
         session: AsyncSession,
-        top_k: int = 5
+        top_k: int = 5,
+        author_id: int = None
     ) -> list[dict]:
         """Находим похожие задачи на основе эмбеддингов."""
         
         # Ищем похожие задачи в векторной базе данных изображений
-        tasks = await self.image_vector_db.search(task_embedding, top_k=top_k)
+        tasks = await self.recsys_vector_db.search(task_embedding, top_k=top_k)
         if not tasks:
             return []
         
         # Получаем данные похожих задач из базы данных
         similar_tasks = []
         
-        for task_id in tasks:
-            task = await session.execute(select(Task).where(Task.id == int(task_id)))
-            task = task.scalar_one_or_none()
-            if task:
+        tasks = await session.execute(select(Task).where(Task.id.in_(tasks)))
+        tasks = tasks.scalars().all()
+        
+        for task in tasks:
+            if author_id is not None:
+                if task.author_id != author_id:
+                    continue
                 similar_tasks.append({
                     "id": task.id,
                     "title": task.title,
                     "description": task.description,
                     "avatar_file": task.avatar_file,
                     "tags": task.tags
-                })
-        
+                })     
+                   
         return similar_tasks
 
 
     async def recommend(
         self,
         task_id: int,
-        session: AsyncSession
+        session: AsyncSession,
+        author_id: int = None
     ) -> list[dict]:
         """Рекомендуем похожие задачи на основе эмбеддингов."""
 
@@ -128,7 +153,7 @@ class ContentBasedRecommender:
         )
         
         # Находим похожие задачи
-        similar_tasks = await self._find_similar_tasks(task_emb, session)
+        similar_tasks = await self._find_similar_tasks(task_emb, session, top_k=10, author_id=author_id)
         
         return similar_tasks
         

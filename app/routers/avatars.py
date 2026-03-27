@@ -17,6 +17,7 @@ from app.db import get_async_session
 from app.auth import get_current_user
 from app.utils.image_ops import validate_image, resize_image
 from app.ml.cv.tasks import detect_and_visualize_task, segment_image_task, predict_avatar_class
+from app.ml.nlp.tasks import update_recommendations_for_task
 
 
 router = APIRouter(
@@ -79,6 +80,9 @@ async def upload_avatar(
         update(Task).where(Task.id == task_id).values(avatar_file=f"avatars/{filename}")
     )
     await session.commit()
+    
+    # После загрузки аватара обновляем рекомендации для задачи
+    update_recommendations_for_task.delay(task_id=task_id)
 
     return {"filepath": f"avatars/{filename}", "filename": filename}
 

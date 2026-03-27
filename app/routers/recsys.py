@@ -19,7 +19,7 @@ router = APIRouter(
 
 @router.get("/recommendations/{task_id}", response_model=RecommendationGet, status_code=status.HTTP_200_OK)
 async def get_recommendations(
-    task_id: str,
+    task_id: int,
     top_k: int = Query(5, ge=1, le=20),
     session: AsyncSession = Depends(get_async_session)
 ) -> RecommendationGet:

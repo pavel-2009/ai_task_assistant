@@ -148,18 +148,12 @@ class RecSysVectorDB:
             if self.redis_client is not None and keys_to_cleanup:
                 await self.redis_client.delete(*keys_to_cleanup)
                 
-                
-    async def update(
-        self, 
-        item_id: str, 
-        embedding: np.ndarray
-    ) -> None:
+    async def update(self, item_id: str, embedding: np.ndarray) -> None:
         """Обновить вектор задачи в базе данных."""
         if item_id not in self.ids_to_idx:
             raise ValueError(f"Задача с ID {item_id} не найдена в базе данных.")
+            
+        await self.delete(item_id)
         
-        idx = self.ids_to_idx[item_id]
-        self.index.reconstruct(idx)  # Восстанавливаем текущий вектор (необходимо для обновления)
-        self.index.remove_ids(np.array([idx]))  # Удаляем старый вектор
-        self.index.add(embedding.reshape(1, -1))  # Добавляем новый вектор
+        await self.add_vector(embedding, item_id)
         

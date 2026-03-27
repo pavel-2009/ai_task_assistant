@@ -6,14 +6,12 @@
 """
 
 import torch
-from torchvision import transforms
+from torchvision import transforms, models
 
 from PIL import Image
 from io import BytesIO
 
 import numpy as np
-
-from .embedding_model import ImageEmbeddingModel
 
 
 class ImageEmbeddingService:
@@ -21,7 +19,11 @@ class ImageEmbeddingService:
     
     def __init__(self):
         # Загружаем предобученную модель ResNet50
-        self.model = ImageEmbeddingModel()
+        self.model = models.resnet50(pretrained=True)
+        
+        # Удаляем последний классификационный слой, оставляем только слои для извлечения признаков
+        self.model = torch.nn.Sequential(*list(self.model.children())[:-2])
+        
         self.model.eval()  # Устанавливаем модель в режим оценки
         
         # Определяем трансформации для входных изображений
