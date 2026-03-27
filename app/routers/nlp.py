@@ -10,12 +10,12 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_async_session
+from ..error_handlers import AppError
 from ..ml.nlp.embedding_service import EmbeddingService
-from ..ml.nlp.semantic_search_service import SemanticSearchService
 from ..ml.nlp.ner_service import NerService
+from ..ml.nlp.semantic_search_service import SemanticSearchService
 
 router = APIRouter(prefix="/nlp", tags=["NLP"])
-
 
 MAX_BATCH_SIZE = 10
 MAX_TEXT_LENGTH = 1000
@@ -57,43 +57,32 @@ def _normalize_texts(payload: str | list[str]) -> str | list[str]:
 
 
 def _get_embedding_service(request: Request) -> EmbeddingService:
-    embedding_service = getattr(request.app.state, "embedding_service", None)
-
-    return embedding_service
+    return getattr(request.app.state, "embedding_service", None)
 
 
 def _get_semantic_search_service(request: Request) -> SemanticSearchService:
-    semantic_search_service = getattr(request.app.state, "semantic_search_service", None)
-
-    return semantic_search_service
+    return getattr(request.app.state, "semantic_search_service", None)
 
 
 def _get_ner_service(request: Request) -> NerService:
-    ner_service = getattr(request.app.state, "ner_service", None)
-
-    return ner_service
+    return getattr(request.app.state, "ner_service", None)
 
 
 @router.post("/embedding", description="Получить эмбеддинг для текста")
 async def get_embedding(request: Request, text: str | list[str] = Body(...)):
     """Получить эмбеддинг для текста."""
     normalized_payload = _normalize_texts(text)
-    
     embedding_service = _get_embedding_service(request)
 
     try:
         if isinstance(normalized_payload, str):
-            
             embedding = await asyncio.to_thread(embedding_service.encode_one, normalized_payload)
-            
         else:
             embedding = await asyncio.to_thread(embedding_service.encode_batch, normalized_payload)
-            
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise AppError("Ошибка при построении эмбеддинга", status_code=500) from exc
 
     return {"embedding": embedding.tolist()}
 
@@ -118,12 +107,10 @@ async def search(
 
     try:
         results = await semantic_search_service.search(normalized_query, session=session, top_k=top_k)
-        
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise AppError("Ошибка при семантическом поиске", status_code=500) from exc
 
     return {"results": results}
 
@@ -144,12 +131,10 @@ async def index(
 
     try:
         await semantic_search_service.index(normalized_text, session=session)
-        
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise AppError("Ошибка индексации текста", status_code=500) from exc
 
     return {"detail": "Текст успешно индексирован"}
 
@@ -157,38 +142,19 @@ async def index(
 @router.post("/tag-task", description="Получить теги для текста задачи")
 async def tag_task(request: Request, text: str = Body(...)):
     """Получить теги для текста задачи."""
-    try:
-        ner_service = _get_ner_service(request)
-        
-        if ner_service is None:
-            raise HTTPException(
-                status_code=503,
-                detail="NerService не инициализирован. Проверьте логи приложения",
-            )
-            
-        text = _normalize_text(text)
-        
-        if len(text) > 1000 or text == '':
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Невалидный текст"
-            )
-        
-        try:
-            result = await asyncio.to_thread(ner_service.tag_task, text)
-            
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Ошибка при обработке текста: {e}"
-            )
-        
-        return {
-            "tags": result
-        }
-        
-    except Exception as e:
+    ner_service = _get_ner_service(request)
+
+    if ner_service is None:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            status_code=503,
+            detail="NerService не инициализирован. Проверьте логи приложения",
         )
+
+    normalized_text = _normalize_text(text)
+
+    try:
+        result = await asyncio.to_thread(ner_service.tag_task, normalized_text)
+    except Exception as exc:
+        raise AppError("Ошибка при обработке текста NER сервисом", status_code=500) from exc
+
+    return {"tags": result}

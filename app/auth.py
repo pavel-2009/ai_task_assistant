@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import os
 from dotenv import load_dotenv
 
-from app.models import User
+from app.db_models import User
 from app.db import get_async_session
 
 load_dotenv()

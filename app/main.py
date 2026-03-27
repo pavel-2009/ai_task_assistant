@@ -14,6 +14,7 @@ import os
 from .ml.nlp.tasks import reindex_tasks
 
 from app.db import close_redis, get_redis
+from app.error_handlers import register_exception_handlers
 from app.services import (
     init_services,
     get_embedding,
@@ -77,6 +78,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+register_exception_handlers(app)
 
 
 from .routers import auth, avatars, nlp, rag, streaming, tasks

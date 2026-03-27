@@ -16,7 +16,7 @@ from sqlalchemy import select, insert
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Text
+from app.db_models import Text
 from app.db import engine
 
 
