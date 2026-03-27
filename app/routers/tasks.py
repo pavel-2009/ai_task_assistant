@@ -15,7 +15,7 @@ from app.models import Task, TaskGet, TaskCreate, TaskUpdate, User
 from app.db import get_async_session
 from app.auth import get_current_user
 from .nlp import _get_ner_service
-from app.ml.nlp.tasks import process_task_tags_and_embedding
+from app.ml.nlp.tasks import process_task_tags_and_embedding, update_recommendations_for_task
 
 
 router = APIRouter(
@@ -156,6 +156,11 @@ async def update_task(
         )
         
         update_dict["tags"] = None  # Сбрасываем теги, они будут обновлены в фоне
+        
+        update_recommendations_for_task.delay(
+            task_id=task.id
+        )
+        
 
     await session.execute(
         update(Task).where(Task.id == task_id).values(**update_dict)

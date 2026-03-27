@@ -48,6 +48,18 @@ class UserCreate(UserBase):
 class UserGet(UserBase):
     """Класс для получения пользователя"""
     id: int
+    
+
+class Recommendation(BaseModel):
+    """Базовый класс для рекомендаций"""
+    task_id: str = Field(description="ID задачи")
+    description: str = Field(description="Описание задачи")
+    similarity_score: float = Field(description="Оценка похожести задачи")
+
+    
+class RecommendationGet(BaseModel):
+    """Класс для получения рекомендаций"""
+    recommendations: list[Recommendation] = Field(description="Список рекомендованных задач")
 
 
 # === SQLAlchemy модели ===

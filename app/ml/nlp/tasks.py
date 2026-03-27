@@ -8,11 +8,15 @@ from sqlalchemy import update, insert, select, create_engine
 from sqlalchemy.orm import sessionmaker
 
 import json
+import torch
 
 from app.celery_app import celery_app
-from app.services import get_ner, get_semantic_search
+from app.services import get_ner, get_semantic_search, get_embedding, get_recsys_vector_db, get_image_embedding
 
 from app.models import Task, Text
+from app.ml.nlp.embedding_service import EmbeddingService
+from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
+from app.ml.cv.embedding.image_embedding_service import ImageEmbeddingService
 
 
 sync_engine = create_engine("sqlite:///./test.db")
@@ -72,3 +76,44 @@ def reindex_tasks():
                 item_id=task.id
             )
     session.close()
+    
+    
+@celery_app.task(name="update_recommendations_for_task")
+def update_recommendations_for_task(task_id: int):
+    """Обновляет эмбеддинг задачи в FAISS и Redis."""
+    # Получить задачу из БД
+    session = SyncSession()
+    task = session.execute(select(Task).where(Task.id == task_id))
+    task = task.scalar_one_or_none()
+    
+    embedding_service: EmbeddingService = get_embedding()
+    
+    text = f"{task.title}\n{task.description}"
+    avatar_file = task.avatar_file  # Путь к файлу аватара, если он есть
+    
+    if avatar_file:
+        # Если есть аватар, нужно получить его эмбеддинг и объединить с текстовым
+        image_embedding_service: ImageEmbeddingService = get_image_embedding()
+        
+        with open(avatar_file, "rb") as f:
+            avatar_bytes = f.read()
+        image_embedding = image_embedding_service.get_embedding(avatar_bytes)
+        text_embedding = embedding_service.encode_one(text)
+        
+        # Объединяем эмбеддинги (например, конкатенацией)
+        embedding = torch.cat([text_embedding, image_embedding])
+        
+    else:
+
+        embedding = embedding_service.encode_one(text)
+        image_embedding = torch.zeros(512)  # Заполнитель для отсутствующего изображения, если размер эмбеддинга 512
+        
+        embedding = torch.cat([embedding, image_embedding])
+    # Добавить в vector_db (если нет) или обновить (если есть)
+    rs_vector_db: RecSysVectorDB = get_recsys_vector_db()
+    
+    if rs_vector_db.ids_to_idx.get(str(task_id)) is not None:
+        rs_vector_db.update(item_id=str(task_id), embedding=embedding)
+        
+    else: 
+        rs_vector_db.add_vector(vector=embedding, task_id=str(task_id))
