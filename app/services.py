@@ -61,7 +61,7 @@ async def init_services(
     )
     
     # Рекомендательная система
-    _services["recsys_vector_db"] = RecSysVectorDB(dim=512, redis_client=redis_client)  # Пример размерности, заменить на реальную
+    _services["recsys_vector_db"] = RecSysVectorDB(dim=896, redis_client=redis_client)  
     
     _services["content_based_recommender"] = ContentBasedRecommender(
         image_embedding_service=_services["image_embedding"],

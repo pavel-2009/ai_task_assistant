@@ -7,6 +7,8 @@ from __future__ import annotations
 from sqlalchemy import update, insert, select, create_engine
 from sqlalchemy.orm import sessionmaker
 
+import numpy as np
+
 import json
 import torch
 
@@ -101,14 +103,14 @@ def update_recommendations_for_task(task_id: int):
         text_embedding = embedding_service.encode_one(text)
         
         # Объединяем эмбеддинги (например, конкатенацией)
-        embedding = torch.cat([text_embedding, image_embedding])
+        embedding = np.concatenate([text_embedding, image_embedding])
         
     else:
 
         embedding = embedding_service.encode_one(text)
-        image_embedding = torch.zeros(512)  # Заполнитель для отсутствующего изображения, если размер эмбеддинга 512
+        image_embedding = torch.zeros(512)  # Заполнитель для отсутствующего изображения, если размер эмбеддинга 896
         
-        embedding = torch.cat([embedding, image_embedding])
+        embedding = np.concatenate([embedding, image_embedding])
     # Добавить в vector_db (если нет) или обновить (если есть)
     rs_vector_db: RecSysVectorDB = get_recsys_vector_db()
     

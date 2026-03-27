@@ -52,7 +52,7 @@ class UserGet(UserBase):
 
 class Recommendation(BaseModel):
     """Базовый класс для рекомендаций"""
-    task_id: str = Field(description="ID задачи")
+    task_id: int = Field(description="ID задачи")
     description: str = Field(description="Описание задачи")
     similarity_score: float = Field(description="Оценка похожести задачи")
 
