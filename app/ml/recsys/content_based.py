@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pathlib import Path
+import redis
 
 from app.ml.cv.embedding.image_embedding_service import ImageEmbeddingService
 from app.ml.nlp.embedding_service import EmbeddingService
@@ -23,11 +24,12 @@ class ContentBasedRecommender:
         self,
         image_embedding_service: ImageEmbeddingService = None,
         text_embedding_service: EmbeddingService = None,
-        image_vector_db: RecSysVectorDB = None
+        image_vector_db: RecSysVectorDB = None,
+        redis_client: redis.Redis = None
     ):
         self.image_embedding_service: ImageEmbeddingService = image_embedding_service or ImageEmbeddingService()
         self.text_embedding_service: EmbeddingService = text_embedding_service or EmbeddingService()
-        self.recsys_vector_db: RecSysVectorDB = image_vector_db or RecSysVectorDB(dim=896)
+        self.recsys_vector_db: RecSysVectorDB = image_vector_db or RecSysVectorDB(dim=896, redis_client=redis_client)
 
 
     async def _get_image_embedding(self, image: str):
@@ -49,6 +51,7 @@ class ContentBasedRecommender:
             
         # Добавляем в кэш
         embedding = self.image_embedding_service.get_embedding(image_bytes)
+        await self.recsys_vector_db.redis_client.set(cache_key, embedding.tobytes(), ex=86400)  # Кэшируем на 24 часа
         
         return embedding
     
@@ -75,7 +78,7 @@ class ContentBasedRecommender:
         combined_emb = np.concatenate([image_emb, text_emb])
         
         # Сохраняем в кэш
-        await self.recsys_vector_db.redis_client.set(cache_key, combined_emb.tobytes())
+        await self.recsys_vector_db.redis_client.set(cache_key, combined_emb.tobytes(), ex=86400)  # Кэшируем на 24 часа
         
         return combined_emb
     
@@ -121,7 +124,7 @@ class ContentBasedRecommender:
         tasks = await session.execute(select(Task).where(Task.id.in_(tasks)))
         tasks = tasks.scalars().all()
         
-        for task in tasks:
+        for task, score in tasks:
             if author_id is not None:
                 if task.author_id != author_id:
                     continue
@@ -130,7 +133,8 @@ class ContentBasedRecommender:
                     "title": task.title,
                     "description": task.description,
                     "avatar_file": task.avatar_file,
-                    "tags": task.tags
+                    "tags": task.tags,
+                    "similarity_score": score
                 })     
                    
         return similar_tasks

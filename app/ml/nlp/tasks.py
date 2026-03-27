@@ -111,6 +111,10 @@ def update_recommendations_for_task(task_id: int):
         image_embedding = torch.zeros(512)  # Заполнитель для отсутствующего изображения, если размер эмбеддинга 896
         
         embedding = np.concatenate([embedding, image_embedding])
+        
+    # Нормализуем эмбеддинг
+    embedding = embedding / np.linalg.norm(embedding)    
+    
     # Добавить в vector_db (если нет) или обновить (если есть)
     rs_vector_db: RecSysVectorDB = get_recsys_vector_db()
     

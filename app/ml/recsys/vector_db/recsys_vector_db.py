@@ -39,7 +39,7 @@ class RecSysVectorDB:
             self.redis_client.set(self.ids_key, ",".join(self.ids))
         
         
-    async def search(self, vector: np.ndarray, top_k: int = 5) -> list[str]:
+    async def search(self, vector: np.ndarray, top_k: int = 5) -> list[tuple[str, float]]:
         """Ищем похожие векторы изображений и возвращаем их IDs."""
         if self.redis_client:
             # Загружаем индекс и IDs из Redis
@@ -53,12 +53,16 @@ class RecSysVectorDB:
         if len(self.ids) == 0:
             return []
         
-        _, I = self.index.search(vector.reshape(1, -1), top_k)
-        similar_ids = [self.ids[i] for i in I[0] if i < len(self.ids)]
+        D, I = self.index.search(vector.reshape(1, -1), top_k)
+        results = []
         
-        return similar_ids
+        for idx, score in zip(I[0], D[0]):
+            if idx < len(self.ids):
+                results.append((self.ids[idx], score))
     
-    
+        return results
+
+
     async def save_to_redis(self) -> bool:
         """Сохранить индекс и метаданные в Redis."""
         if self.redis_client is None:
