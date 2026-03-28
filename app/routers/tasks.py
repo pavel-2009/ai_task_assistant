@@ -5,18 +5,15 @@
 from fastapi import APIRouter, status, Depends, HTTPException, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
-import celery
 
 import typing
-import json
-import asyncio
 
 from app.db_models import Task, User
 from app.schemas import TaskCreate, TaskGet, TaskUpdate
 from app.db import get_async_session
 from app.auth import get_current_user
-from .nlp import _get_ner_service
 from app.ml.nlp.tasks import process_task_tags_and_embedding, update_recommendations_for_task
+from app.ml.recsys.tasks import process_task_interaction, delete_task_interactions
 
 
 router = APIRouter(
@@ -71,6 +68,14 @@ async def create_task(
         title=task.title,
         description=task.description
     )
+    
+    # Запускаем фоновую задачу для обновления рекомендаций для всех задач (включая новую)
+    update_recommendations_for_task.delay(
+        task_id=task.id,
+        user_id=current_user.id,
+        event_type="create",
+        weight=1,
+    )
 
     return task
 
@@ -114,11 +119,47 @@ async def get_task(
             description=task.description,
             author_id=task.author_id
         )
+        
+    # Запускаем фоновую задачу для обработки взаимодействия пользователя с задачей (просмотр)
+    process_task_interaction.delay(
+        user_id=task.author_id,
+        task_id=task_id,
+        event_type="view",
+        weight=0.5,
+    )
 
     raise HTTPException(
         status_code=404,
         detail="Задача с указанным ID не найдена"
     )
+    
+    
+@router.post("/{task_id}/like", status_code=status.HTTP_200_OK, description="Поставить лайк задаче")
+async def like_task(
+    task_id: int = Path(...),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """Поставить лайк задаче"""
+    
+    task = await session.execute(select(Task).where(Task.id == task_id))
+    task = task.scalar_one_or_none()
+
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Задача с указанным ID не найдена"
+        )
+    
+    # Запускаем фоновую задачу для обработки взаимодействия пользователя с задачей (лайк)
+    process_task_interaction.delay(
+        user_id=current_user.id,
+        task_id=task_id,
+        event_type="like",
+        weight=1,
+    )
+
+    return {"message": "Задаче поставлен лайк"}
 
 
 @router.put("/{task_id}", status_code=status.HTTP_200_OK, description="Обновление задачи")
@@ -209,6 +250,9 @@ async def delete_task(
     # Удаляем данные из векторной базы и семантического поиска
     semantic_search_service = request.app.state.semantic_search_service
     await semantic_search_service.delete(item_id=str(task_id), session=session)
+    
+    # Запускаем фоновую задачу для удаления всех взаимодействий для этой задачи в рекомендательной системе
+    delete_task_interactions.delay(task_id=task_id)
     
     await session.commit()
     
