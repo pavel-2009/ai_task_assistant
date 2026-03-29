@@ -15,6 +15,8 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import pickle
 
+from app.services import get_collaborative_filtering_recommender
+
 
 sync_engine = create_engine("sqlite:///./test.db")
 SyncSession = sessionmaker(sync_engine)
@@ -73,13 +75,18 @@ def delete_task_interactions(task_id: int):
     
     
 @celery_app.task(name="train_collaborative_filtering_model")
-def train_collaborative_filtering_model(
-    model: AlternatingLeastSquares,
-    user_item_matrix: csr_matrix,
-    redis_client: redis.Redis
-):
+def train_collaborative_filtering_model():
     """Обучение модели коллаборативной фильтрации с сохранением модели в Redis."""
 
+    model = AlternatingLeastSquares(factors=50, regularization=0.01, iterations=20)
+    
+    collaborative_filtering_recommender = get_collaborative_filtering_recommender()
+    session = SyncSession()
+    
+    user_item_matrix, _, _, _, _ = collaborative_filtering_recommender.build_user_item_matrix(session)
+    
     model.fit(user_item_matrix)
+    
+    redis_client = collaborative_filtering_recommender.redis_client
         
     redis_client.set("collaborative_filtering_model", pickle.dumps((model.user_factors, model.item_factors)))

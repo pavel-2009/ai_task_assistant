@@ -3,6 +3,7 @@
 """
 
 from celery import Celery
+from celery.schedules import crontab
 import os
 from dotenv import load_dotenv
 
@@ -19,7 +20,8 @@ celery_app = Celery(
     backend=CELERY_RESULT_BACKEND,
     include=[
         "app.ml.cv.tasks",
-        "app.ml.nlp.tasks"
+        "app.ml.nlp.tasks",
+        "app.ml.recsys.tasks"
     ]
 )
 
@@ -33,3 +35,10 @@ celery_app.conf.update(
     enable_utc=True,
     worker_prefetch_multiplier=1,
 )
+
+celery_app.conf.beat_schedule = {
+    "reindex-tasks-every-day": {
+        "task": "train_collaborative_filtering_model",
+        "schedule": crontab(hour=0, minute=0),  # Каждый день в полночь
+    },
+}

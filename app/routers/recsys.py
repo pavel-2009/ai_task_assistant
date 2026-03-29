@@ -74,7 +74,7 @@ async def get_cf_recommendations(
     
     collaborative_filtering_recommender: CollaborativeFilteringRecommender = services.get_service("collaborative_filtering_recommender")
     
-    recommendations = await collaborative_filtering_recommender.recommend(current_user.id, session, top_k=top_k)
+    recommendations = await collaborative_filtering_recommender.recommend(current_user.id, top_k=top_k)
     
     return RecommendationGet(
         recommendations=[

@@ -9,7 +9,7 @@ from implicit.als import AlternatingLeastSquares
 import numpy as np
 import pickle
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.db_models import Interaction, Event
@@ -25,33 +25,25 @@ class CollaborativeFilteringRecommender:
         self.redis_client = redis_client
         
     
-    async def build_user_item_matrix(self, session: AsyncSession) -> csr_matrix:
-        """Построение разреженной матрицы пользователь-объект на основе взаимодействий из БД."""
+    def build_user_item_matrix(self, session: Session) -> tuple[csr_matrix, dict, dict, list, list]:
+        """Построение разреженной матрицы взаимодействий пользователей с задачами."""
         
-        interactions = await session.execute(
-            select(Interaction)
-        )
+        interactions = session.execute(select(Interaction))
         interactions = interactions.scalars().all()
         
-        user_ids_to_tasks = [(interaction.user_id, interaction.task_id) for interaction in interactions]
+        unique_users = sorted(set(i.user_id for i in interactions))
+        unique_tasks = sorted(set(i.task_id for i in interactions))
         
-        # Создаем разреженную матрицу пользователь-объект
-        user_item_matrix = csr_matrix(
-            (interaction.weight for interaction in interactions),
-            (
-                [user_id for user_id, _ in user_ids_to_tasks],
-                [task_id for _, task_id in user_ids_to_tasks]
-            )
-        )
-        return user_item_matrix
-    
-    
-    def train_model(self, user_item_matrix: csr_matrix):
-        """Обучение модели коллаборативной фильтрации на основе разреженной матрицы."""
+        user_to_idx = {user: idx for idx, user in enumerate(unique_users)}
+        task_to_idx = {task: idx for idx, task in enumerate(unique_tasks)}
         
-        model: AlternatingLeastSquares = AlternatingLeastSquares(factors=50, regularization=0.01, iterations=20)
+        rows = [user_to_idx[i.user_id] for i in interactions]
+        cols = [task_to_idx[i.task_id] for i in interactions]
+        data = [i.weight for i in interactions]
         
-        model.fit(user_item_matrix)
+        matrix = csr_matrix((data, (rows, cols)), shape=(len(unique_users), len(unique_tasks)))
+        
+        return matrix, user_to_idx, task_to_idx, unique_users, unique_tasks
         
         
     def load(self) -> AlternatingLeastSquares:
@@ -59,7 +51,7 @@ class CollaborativeFilteringRecommender:
         
         model_data = self.redis_client.get("collaborative_filtering_model")
         if model_data:
-            model = np.loads(model_data)  # Десериализация модели из Redis
+            model = pickle.loads(model_data)  # Десериализация модели из Redis
             return model
         return None
     
@@ -71,7 +63,7 @@ class CollaborativeFilteringRecommender:
         if model is None:
             return []
         
-        user_factors, item_factors = model
+        user_factors, item_factors = model  # Распакованные факторы из модели
         
         # Получаем вектор факторов для данного пользователя
         user_vector = user_factors[user_id]
