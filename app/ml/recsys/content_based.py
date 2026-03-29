@@ -35,12 +35,6 @@ class ContentBasedRecommender:
     async def _get_image_embedding(self, image: str):
         """Получаем эмбеддинг для изображения."""
         
-        # Проверяем кэш
-        cache_key = f"img_emb:{image}"
-        cached_emb = await self.recsys_vector_db.redis_client.get(cache_key)
-        if cached_emb is not None:
-            return np.frombuffer(cached_emb, dtype=np.float32)
-        
         image_path = Path(image)
         
         if not image_path.is_file():
@@ -49,9 +43,7 @@ class ContentBasedRecommender:
         with image_path.open("rb") as f:
             image_bytes = f.read()
             
-        # Добавляем в кэш
         embedding = self.image_embedding_service.get_embedding(image_bytes)
-        await self.recsys_vector_db.redis_client.set(cache_key, embedding.tobytes(), ex=86400)  # Кэшируем на 24 часа
         
         return embedding
     
