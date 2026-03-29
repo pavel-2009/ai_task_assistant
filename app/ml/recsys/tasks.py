@@ -81,9 +81,9 @@ def train_collaborative_filtering_model():
     collaborative_filtering_recommender = get_collaborative_filtering_recommender()
     session = SyncSession()
     
-    user_factors, item_factors, user_to_idx, task_to_idx, idx_to_task = collaborative_filtering_recommender.build_user_item_matrix(session)
+    user_item_matrix, user_to_idx, task_to_idx, unique_users, unique_tasks = collaborative_filtering_recommender.build_user_item_matrix(session)
     
-    model.fit(user_factors)
+    model.fit(user_item_matrix)
     
     # Вычленяем самые популярные задачи для новых пользователей (холодный старт)
     popular_tasks = session.execute(
@@ -94,4 +94,4 @@ def train_collaborative_filtering_model():
     
     redis_client = collaborative_filtering_recommender.redis_client
         
-    redis_client.set("collaborative_filtering_model", pickle.dumps((user_factors, item_factors, user_to_idx, task_to_idx, idx_to_task, popular_tasks)))  # Сериализация модели в Redis
+    redis_client.set("collaborative_filtering_model", pickle.dumps((user_item_matrix, user_to_idx, task_to_idx, unique_users, unique_tasks, popular_tasks)))  # Сериализация модели в Redis
