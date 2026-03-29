@@ -7,6 +7,7 @@ from scipy.sparse import csr_matrix
 from implicit.als import AlternatingLeastSquares
 
 import numpy as np
+import pickle
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -51,16 +52,6 @@ class CollaborativeFilteringRecommender:
         model: AlternatingLeastSquares = AlternatingLeastSquares(factors=50, regularization=0.01, iterations=20)
         
         model.fit(user_item_matrix)
-        
-        
-    def save(self, model: AlternatingLeastSquares):
-        """Сохранение обученной модели в Redis."""
-        
-        # Сериализация модели в numpy массивы и сохранение в Redis
-        model = np.array(model.user_factors), np.array(model.item_factors)
-        
-        # Сериализация модели и сохранение в Redis
-        self.redis_client.set("collaborative_filtering_model", model)
         
         
     def load(self) -> AlternatingLeastSquares:

@@ -17,6 +17,7 @@ from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.embedding_service import EmbeddingService
 from app.ml.nlp.llm_service import LLMService
 from app.ml.recsys.content_based import ContentBasedRecommender
+from app.ml.recsys.collaborative_filtering import CollaborativeFilteringRecommender
 from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
 
 
@@ -67,6 +68,10 @@ async def init_services(
         image_embedding_service=_services["image_embedding"],
         text_embedding_service=_services["embedding"],
         image_vector_db=_services["recsys_vector_db"]
+    )
+    
+    _services["collaborative_filtering_recommender"] = CollaborativeFilteringRecommender(
+        redis_client=redis_client
     )
 
 
@@ -133,3 +138,6 @@ def get_content_based_recommender() -> ContentBasedRecommender:
 
 def get_recsys_vector_db() -> RecSysVectorDB:
     return get_service("recsys_vector_db")
+
+def get_collaborative_filtering_recommender() -> CollaborativeFilteringRecommender:
+    return get_service("collaborative_filtering_recommender")

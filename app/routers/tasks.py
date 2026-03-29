@@ -69,12 +69,17 @@ async def create_task(
         description=task.description
     )
     
+    # Запускаем фоновую задачу для обработки взаимодействия пользователя с задачей (создание)
+    process_task_interaction.delay(
+        user_id=current_user.id,
+        task_id=task.id,
+        event_type="create",
+        weight=1,
+    )
+    
     # Запускаем фоновую задачу для обновления рекомендаций для всех задач (включая новую)
     update_recommendations_for_task.delay(
         task_id=task.id,
-        user_id=current_user.id,
-        event_type="create",
-        weight=1,
     )
 
     return task
@@ -113,6 +118,15 @@ async def get_task(
     task = task.scalar_one_or_none()
 
     if task is not None:
+        
+        # Запускаем фоновую задачу для обработки взаимодействия пользователя с задачей (просмотр)
+        process_task_interaction.delay(
+            user_id=task.author_id,
+            task_id=task_id,
+            event_type="view",
+            weight=0.5,
+        )
+        
         return TaskGet(
             id=task.id,
             title=task.title,
@@ -120,13 +134,7 @@ async def get_task(
             author_id=task.author_id
         )
         
-    # Запускаем фоновую задачу для обработки взаимодействия пользователя с задачей (просмотр)
-    process_task_interaction.delay(
-        user_id=task.author_id,
-        task_id=task_id,
-        event_type="view",
-        weight=0.5,
-    )
+        
 
     raise HTTPException(
         status_code=404,

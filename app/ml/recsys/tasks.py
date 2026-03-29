@@ -5,10 +5,15 @@
 from app.celery_app import celery_app
 from app.db_models import Interaction, Event
 
+from implicit.als import AlternatingLeastSquares
+from scipy.sparse import csr_matrix
+import redis
+
 from sqlalchemy import select, update, create_engine, delete
 from sqlalchemy.orm import sessionmaker
 
 from datetime import datetime
+import pickle
 
 
 sync_engine = create_engine("sqlite:///./test.db")
@@ -27,7 +32,7 @@ def process_task_interaction(
     session = SyncSession()
     
     task = session.execute(
-        select(Interaction).where(Interaction.task_id == task_id)  
+        select(Interaction).where(Interaction.task_id == task_id, Interaction.user_id == user_id    )  
     )
     
     if not task.scalar_one_or_none():
@@ -65,3 +70,16 @@ def delete_task_interactions(task_id: int):
     )
     
     session.commit() 
+    
+    
+@celery_app.task(name="train_collaborative_filtering_model")
+def train_collaborative_filtering_model(
+    model: AlternatingLeastSquares,
+    user_item_matrix: csr_matrix,
+    redis_client: redis.Redis
+):
+    """Обучение модели коллаборативной фильтрации с сохранением модели в Redis."""
+
+    model.fit(user_item_matrix)
+        
+    redis_client.set("collaborative_filtering_model", pickle.dumps((model.user_factors, model.item_factors)))
