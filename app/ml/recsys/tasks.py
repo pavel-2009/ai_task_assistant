@@ -6,10 +6,8 @@ from app.celery_app import celery_app
 from app.db_models import Interaction, Event
 
 from implicit.als import AlternatingLeastSquares
-from scipy.sparse import csr_matrix
-import redis
 
-from sqlalchemy import select, update, create_engine, delete
+from sqlalchemy import select, update, create_engine, delete, func
 from sqlalchemy.orm import sessionmaker
 
 from datetime import datetime
@@ -83,10 +81,17 @@ def train_collaborative_filtering_model():
     collaborative_filtering_recommender = get_collaborative_filtering_recommender()
     session = SyncSession()
     
-    user_item_matrix, _, _, _, _ = collaborative_filtering_recommender.build_user_item_matrix(session)
+    user_factors, item_factors, user_to_idx, task_to_idx, idx_to_task = collaborative_filtering_recommender.build_user_item_matrix(session)
     
-    model.fit(user_item_matrix)
+    model.fit(user_factors)
+    
+    # Вычленяем самые популярные задачи для новых пользователей (холодный старт)
+    popular_tasks = session.execute(
+        select(Interaction.task_id).group_by(Interaction.task_id).order_by(func.count(Interaction.task_id).desc()).limit(10)
+    )
+    popular_tasks = [task[0] for task in popular_tasks.scalars().all()]
+
     
     redis_client = collaborative_filtering_recommender.redis_client
         
-    redis_client.set("collaborative_filtering_model", pickle.dumps((model.user_factors, model.item_factors)))
+    redis_client.set("collaborative_filtering_model", pickle.dumps((user_factors, item_factors, user_to_idx, task_to_idx, idx_to_task, popular_tasks)))  # Сериализация модели в Redis

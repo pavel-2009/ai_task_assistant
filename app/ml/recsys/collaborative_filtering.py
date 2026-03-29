@@ -46,27 +46,29 @@ class CollaborativeFilteringRecommender:
         return matrix, user_to_idx, task_to_idx, unique_users, unique_tasks
         
         
-    def load(self) -> AlternatingLeastSquares:
+    def load(self) -> tuple[np.ndarray, np.ndarray, dict, dict, dict, list] | None:
         """Загрузка модели из Redis."""
         
         model_data = self.redis_client.get("collaborative_filtering_model")
         if model_data:
-            model = pickle.loads(model_data)  # Десериализация модели из Redis
-            return model
-        return None
-    
-    
+            user_factors, item_factors, user_to_idx, task_to_idx, idx_to_task, popular_tasks = pickle.loads(model_data)  # Десериализация модели из Redis
+            return user_factors, item_factors, user_to_idx, task_to_idx, idx_to_task, popular_tasks
+        return None, None, None, None, None, None
+
+
     def recommend(self, user_id: int, top_k: int = 10) -> list[tuple[int, float]]:
         """Получение рекомендаций для пользователя на основе обученной модели."""
         
-        model = self.load()
-        if model is None:
-            return []
+        user_factors, item_factors, user_to_idx, task_to_idx, idx_to_task, popular_tasks = self.load()
+        if user_factors is None:
+            return [(task_id, 0.0) for task_id in popular_tasks]  # Рекомендации на основе популярных задач для новых пользователей (холодный старт)
         
-        user_factors, item_factors = model  # Распакованные факторы из модели
+        # Если пользователь не найден в модели, возвращаем рекомендации на основе популярных задач (холодный старт)
+        if user_id not in user_to_idx:
+            return [(task_id, 0.0) for task_id in popular_tasks]  # Рекомендации на основе популярных задач для новых пользователей (холодный старт)
         
         # Получаем вектор факторов для данного пользователя
-        user_vector = user_factors[user_id]
+        user_vector = user_factors[user_to_idx.get(user_id, -1)]
         
         # Вычисляем предсказанные оценки для всех объектов
         scores = item_factors.dot(user_vector)
@@ -74,4 +76,9 @@ class CollaborativeFilteringRecommender:
         # Получаем топ-K рекомендаций
         top_k_indices = np.argsort(scores)[::-1][:top_k]
         
-        return [(index, scores[index]) for index in top_k_indices]
+        recommendations = [(idx_to_task[idx], scores[idx]) for idx in top_k_indices]
+        
+        recommendations_cache_key = f"cf_recommendations_user_{user_id}"
+        self.redis_client.set(recommendations_cache_key, pickle.dumps(recommendations), ex=3600)  # Кэшируем рекомендации на 1 час
+        
+        return recommendations
