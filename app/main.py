@@ -12,6 +12,7 @@ import sys
 import os
 
 from .ml.nlp.tasks import reindex_tasks
+from .ml.recsys.tasks import train_collaborative_filtering_model
 
 from app.db import close_redis, get_redis
 from app.error_handlers import register_exception_handlers
@@ -66,6 +67,10 @@ async def lifespan(app: FastAPI):
         logger.info("Starting background task for reindexing...")
         reindex_tasks.delay()
         logger.info("Background task for reindexing started successfully")
+        
+        logger.info("Starting background task for training collaborative filtering model...")
+        train_collaborative_filtering_model.delay()
+        logger.info("Background task for training collaborative filtering model started successfully")
 
     except Exception as exc:
         logger.error("Error during startup: %s", exc, exc_info=True)
