@@ -9,6 +9,7 @@ import asyncio
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core import config
 from ..db import get_async_session
 from ..error_handlers import AppError
 from ..ml.nlp.embedding_service import EmbeddingService
@@ -95,7 +96,7 @@ async def get_embedding(request: Request, text: str | list[str] = Body(...)):
 async def search(
     request: Request,
     query: str = Body(..., embed=True, description="Текст запроса для поиска"),
-    top_k: int = Body(5, embed=True, description="Количество результатов для возврата"),
+    top_k: int = Body(config.DEFAULT_TOP_K, embed=True, description="Количество результатов для возврата"),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Поиск документов, наиболее похожих на запрос."""

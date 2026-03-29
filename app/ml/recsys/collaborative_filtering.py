@@ -8,9 +8,10 @@ from scipy.sparse import csr_matrix
 import numpy as np
 import pickle
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core import config
 from app.db_models import Interaction
 
 
@@ -24,11 +25,11 @@ class CollaborativeFilteringRecommender:
         self.redis_client = redis_client
         
     
-    def build_user_item_matrix(self, session: Session) -> tuple[csr_matrix, dict, dict, list, list]:
+    async def build_user_item_matrix(self, session: AsyncSession) -> tuple[csr_matrix, dict, dict, list, list]:
         """Построение разреженной матрицы взаимодействий пользователей с задачами."""
         
-        interactions = session.execute(select(Interaction))
-        interactions = interactions.scalars().all()
+        result = await session.execute(select(Interaction))
+        interactions = result.scalars().all()
         
         unique_users = sorted(set(i.user_id for i in interactions))
         unique_tasks = sorted(set(i.task_id for i in interactions))
@@ -55,7 +56,7 @@ class CollaborativeFilteringRecommender:
         return None, None, None, None, None, []
 
 
-    def recommend(self, user_id: int, top_k: int = 10) -> list[tuple[int, float]]:
+    def recommend(self, user_id: int, top_k: int = config.DEFAULT_TOP_K) -> list[tuple[int, float]]:
         """Получение рекомендаций для пользователя на основе обученной модели."""
         
         # Проверяем кэш

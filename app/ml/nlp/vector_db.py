@@ -13,14 +13,10 @@ import numpy as np
 import redis.asyncio as redis
 
 from sqlalchemy import select, insert
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import config
 from app.db_models import Text
-from app.db import engine
-
-
-SyncSession = sessionmaker(engine)
 
 
 class VectorDB:
@@ -120,46 +116,11 @@ class VectorDB:
         
         return resolved_item_ids
     
-    def add_sync(
-        self,
-        embedding: list[float] | np.ndarray,
-        item_id: str | None = None,
-        text: str = "",
-    ) -> str:
-        """Добавить эмбеддинг и similarity. Сохранить текст в базу данных."""
-        
-        session = SyncSession()
-        
-        vector = np.asarray(embedding, dtype=np.float32)
-        
-        if vector.ndim != 1:
-            raise ValueError("Эмбеддинг должен быть одномерным вектором")
-        if vector.shape[0] != self.dim:
-            raise ValueError(f"Размерность эмбеддинга должна быть равна {self.dim}")
-
-        resolved_item_id = item_id or str(uuid4())
-        
-        try:
-            self.index.add(vector.reshape(1, -1)) # -1 - для сохранения размерности (1, dim)
-            self.ids.append(resolved_item_id)
-        except Exception as e:
-            raise RuntimeError(f"Ошибка при добавлении эмбеддинга в индекс: {e}")
-        
-        session.execute(
-            insert(Text).values(text_id=resolved_item_id, text=text)
-        )
-        session.commit()
-        session.close()
-        
-        self.ids_to_idx[resolved_item_id] = len(self.ids) - 1
-        
-        return resolved_item_id
-
     async def search(
         self,
         query_embedding: list[float] | np.ndarray,
         session: AsyncSession,
-        top_k: int = 5,
+        top_k: int = config.DEFAULT_TOP_K,
     ) -> list[dict]:
         """Поиск наиболее похожих текстов по эмбеддингу запроса."""
         

@@ -1,39 +1,61 @@
-"""
+﻿"""
 Точка входа в приложение.
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import sys
+import signal
+import asyncio
+import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Response, status
-import sys
-import os
+
+from app.core import config
+from app.db import close_redis, get_redis, engine
+from app.error_handlers import register_exception_handlers
+from app.celery_app import celery_app
+from app.services import (
+    get_embedding,
+    get_llm,
+    get_ner,
+    get_rag,
+    get_semantic_search,
+    get_vector_db,
+    init_services,
+)
 
 from .ml.nlp.tasks import reindex_tasks
 from .ml.recsys.tasks import train_collaborative_filtering_model
-
-from app.db import close_redis, get_redis
-from app.error_handlers import register_exception_handlers
-from app.services import (
-    init_services,
-    get_embedding,
-    get_ner,
-    get_vector_db,
-    get_semantic_search,
-    get_llm,
-    get_rag,
-)
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# Переменные для хранения ID фоновых задач
+_background_tasks = {
+    "reindex_tasks": None,
+    "train_cf": None,
+}
+_shutdown_event = asyncio.Event()
+
+
+def _handle_shutdown_signal(signum, frame):
+    """Обработчик сигналов SIGTERM и SIGINT."""
+    logger.info(f"Получен сигнал завершения ({signal.Signals(signum).name}). Инициализирую graceful shutdown...")
+    _shutdown_event.set()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Регистрируем обработчики сигналов
+    signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+    signal.signal(signal.SIGINT, _handle_shutdown_signal)
+    
     redis_client = None
 
     try:
@@ -43,33 +65,31 @@ async def lifespan(app: FastAPI):
         logger.info("Redis connected successfully")
 
         logger.info("Initializing all services...")
-        
+
         inference_checkpoint_path = Path(__file__).parent.parent / "checkpoints" / "model.pth"
         inference_idx_to_class = {0: "cat", 1: "dog", 2: "house"}
-        use_onnx = os.getenv("USE_ONNX", "False").lower() in ("true", "1", "t")
-        
+
         await init_services(
-            use_onnx=use_onnx,
+            use_onnx=config.USE_ONNX,
             redis_client=redis_client,
             inference_checkpoint_path=str(inference_checkpoint_path),
             inference_idx_to_class=inference_idx_to_class,
         )
         logger.info("All services initialized successfully")
 
-        # Сохраняем сервисы в app.state для доступа в роутерах
         app.state.embedding_service = get_embedding()
         app.state.ner_service = get_ner()
         app.state.vector_db = get_vector_db()
         app.state.semantic_search_service = get_semantic_search()
         app.state.llm_service = get_llm()
         app.state.rag_service = get_rag()
-        
+
         logger.info("Starting background task for reindexing...")
-        reindex_tasks.delay()
+        _background_tasks["reindex_tasks"] = reindex_tasks.delay()
         logger.info("Background task for reindexing started successfully")
-        
+
         logger.info("Starting background task for training collaborative filtering model...")
-        train_collaborative_filtering_model.delay()
+        _background_tasks["train_cf"] = train_collaborative_filtering_model.delay()
         logger.info("Background task for training collaborative filtering model started successfully")
 
     except Exception as exc:
@@ -79,7 +99,44 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        await close_redis()
+        logger.info("Initiating graceful shutdown...")
+        
+        # Отменяем все активные фоновые задачи
+        logger.info("Отмена фоновых задач...")
+        for task_name, task in _background_tasks.items():
+            if task:
+                try:
+                    task.revoke(terminate=False)
+                    logger.info(f"Задача '{task_name}' отменена")
+                except Exception as e:
+                    logger.warning(f"Ошибка при отмене задачи '{task_name}': {e}")
+        
+        # Даем Celery задачам 30 секунд на завершение
+        logger.info("Ожидаю завершения Celery задач (30 сек)...")
+        try:
+            # Отправляем сигнал graceful shutdown в Celery workers
+            celery_app.control.shutdown(timeout=30)
+            time.sleep(2)  # Даем время на обработку
+        except Exception as e:
+            logger.warning(f"Ошибка при shutdown Celery: {e}")
+        
+        # Закрываем Redis
+        logger.info("Закрытие соединения с Redis...")
+        try:
+            await close_redis()
+            logger.info("Redis соединение закрыто")
+        except Exception as e:
+            logger.warning(f"Ошибка при закрытии Redis: {e}")
+        
+        # Закрываем async_session и engine
+        logger.info("Закрытие database engine...")
+        try:
+            await engine.dispose()
+            logger.info("Database engine закрыт")
+        except Exception as e:
+            logger.warning(f"Ошибка при закрытии engine: {e}")
+        
+        logger.info("Graceful shutdown завершен")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -101,15 +158,6 @@ async def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
     semantic_search_service = getattr(app.state, "semantic_search_service", None)
     ner_service = getattr(app.state, "ner_service", None)
     vector_db = getattr(app.state, "vector_db", None)
-    
-    OLLAMA_URL = os.getenv(
-            "OLLAMA_BASE_URL",
-            "http://localhost:11434"
-        )
-    OLLAMA_MODEL = os.getenv(
-            "OLLAMA_MODEL",
-            "llama3.2"
-        )
 
     embedding_ready = bool(
         embedding_service is not None
@@ -151,13 +199,13 @@ async def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
         },
         "llm": {
             "ready": llm_service and await llm_service.is_available(),
-            "model": OLLAMA_MODEL,
-            "url": OLLAMA_URL
+            "model": config.OLLAMA_MODEL,
+            "url": config.OLLAMA_BASE_URL,
         },
         "rag": {
             "ready": rag_service is not None,
-            "llm_model": OLLAMA_MODEL if rag_service is not None else None,
-        }
+            "llm_model": config.OLLAMA_MODEL if rag_service is not None else None,
+        },
     }
 
 

@@ -11,7 +11,9 @@ from sqlalchemy import select
 from app.db_models import User
 from app.schemas import UserCreate, UserGet
 from app.db import get_async_session
-from app.auth import hash_password, verify_password, create_access_token
+from app.auth import create_access_token
+from app.core.rate_limit import limiter
+from app.core.security import validate_password_strength, hash_password, verify_password
 
 
 router = APIRouter(
@@ -20,7 +22,7 @@ router = APIRouter(
 )
 
 
-
+@limiter.limit("5/minute")  # Ограничение на 5 запросов в минуту для всех эндпоинтов в этом роутере
 @router.post("/register", status_code=status.HTTP_201_CREATED, description="Регистрация нового пользователя")
 async def register_new_user(
     user_payload: UserCreate,
@@ -36,8 +38,15 @@ async def register_new_user(
             status_code=400,
             detail="Пользователь с таким именем уже существует"
         )
+        
+    password = user_payload.password
+    if not validate_password_strength(password):
+        raise HTTPException(
+            status_code=400,
+            detail="Пароль должен быть не менее 8 символов, содержать заглавные и строчные буквы, цифры и специальные символы"
+        )
 
-    hashed_password = hash_password(user_payload.password)
+    hashed_password = hash_password(password)
 
     new_user = User(
         username=user_payload.username,
@@ -53,6 +62,7 @@ async def register_new_user(
     )
 
 
+@limiter.limit("10/minute")  # Ограничение на 10 запросов в минуту для эндпоинта логина
 @router.post("/login", status_code=status.HTTP_200_OK, description="Аутентификация пользователя")
 async def login_user(
     form_data: OAuth2PasswordRequestForm = Depends(),

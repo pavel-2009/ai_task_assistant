@@ -10,6 +10,7 @@ import json
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import config
 from .embedding_service import EmbeddingService
 from .vector_db import VectorDB
 
@@ -72,7 +73,7 @@ class SemanticSearchService:
         
         return resolved_item_id
 
-    async def search(self, query: str, session: AsyncSession, top_k: int = 5) -> list[dict]:
+    async def search(self, query: str, session: AsyncSession, top_k: int = config.DEFAULT_TOP_K) -> list[dict]:
         """Искать документы, наиболее похожие на запрос."""
         normalized_query = self._normalize_text(query, "Запрос")
         

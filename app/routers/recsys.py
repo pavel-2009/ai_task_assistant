@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import services
+from app.core import config
 from app.db_models import Task, User
 from app.schemas import Recommendation, RecommendationGet
 from app.db import get_async_session
@@ -24,7 +25,7 @@ router = APIRouter(
 async def get_recommendations(
     task_id: int,
     current_user: User = Depends(get_current_user),
-    top_k: int = Query(5, ge=1, le=20),
+    top_k: int = Query(config.DEFAULT_TOP_K, ge=1, le=20),
     author_id: int = Query(None, description="ID автора задачи для фильтрации рекомендаций"),
     session: AsyncSession = Depends(get_async_session)
 ) -> RecommendationGet:
@@ -61,7 +62,7 @@ async def get_recommendations(
 @router.get("/cf/recommendations", response_model=RecommendationGet, status_code=status.HTTP_200_OK)
 async def get_cf_recommendations(
     current_user: User = Depends(get_current_user),
-    top_k: int = Query(5, ge=1, le=20),
+    top_k: int = Query(config.DEFAULT_TOP_K, ge=1, le=20),
     session: AsyncSession = Depends(get_async_session)
 ) -> RecommendationGet:
     """Получение рекомендаций на основе коллаборативной фильтрации для текущего пользователя."""

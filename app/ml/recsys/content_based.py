@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pathlib import Path
 import redis
 
+from app.core import config
 from app.ml.cv.embedding.image_embedding_service import ImageEmbeddingService
 from app.ml.nlp.embedding_service import EmbeddingService
 from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
@@ -100,7 +101,7 @@ class ContentBasedRecommender:
         self,
         task_embedding: np.ndarray,
         session: AsyncSession,
-        top_k: int = 5,
+        top_k: int = config.DEFAULT_TOP_K,
         author_id: int = None
     ) -> list[dict]:
         """Находим похожие задачи на основе эмбеддингов."""
@@ -149,7 +150,12 @@ class ContentBasedRecommender:
         )
         
         # Находим похожие задачи
-        similar_tasks = await self._find_similar_tasks(task_emb, session, top_k=10, author_id=author_id)
+        similar_tasks = await self._find_similar_tasks(
+            task_emb,
+            session,
+            top_k=config.DEFAULT_TOP_K,
+            author_id=author_id,
+        )
         
         return similar_tasks
         

@@ -6,6 +6,8 @@ import hashlib
 import json
 from typing import TYPE_CHECKING, Any, Dict, List
 
+from app.core import config
+
 if TYPE_CHECKING:
     from redis.asyncio import Redis as AsyncRedis
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,7 +72,7 @@ ID: {task.get('task_id')}"""
         self,
         query: str,
         session: "AsyncSession",
-        top_k: int = 5,
+        top_k: int = config.DEFAULT_TOP_K,
         use_cache: bool = True
     ) -> Dict[str, Any]:
         """Получение ответа на вопрос с помощью RAG"""
@@ -145,7 +147,7 @@ ID: {task.get('task_id')}"""
         self,
         query: str,
         session: "AsyncSession",
-        top_k: int = 5,
+        top_k: int = config.DEFAULT_TOP_K,
     ):
         """Потоковое получение ответа на вопрос с помощью RAG."""
 

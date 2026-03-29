@@ -14,6 +14,7 @@ from app.db import get_async_session
 from app.auth import get_current_user
 from app.ml.nlp.tasks import process_task_tags_and_embedding, update_recommendations_for_task
 from app.ml.recsys.tasks import process_task_interaction, delete_task_interactions
+from app.core.dependencies import get_task_or_404, check_owner
 
 
 router = APIRouter(
@@ -109,36 +110,24 @@ async def check_tags_status(
 
 @router.get("/{task_id}", status_code=status.HTTP_200_OK, description="Получение задачи по ID")
 async def get_task(
-    task_id: int = Path(...),
-    session: AsyncSession = Depends(get_async_session)
+    task: Task = Depends(get_task_or_404),
+    current_user: User = Depends(get_current_user)
 ):
     """Получение задачи по ID"""
 
-    task = await session.execute(select(Task).where(Task.id == task_id))
-    task = task.scalar_one_or_none()
-
-    if task is not None:
-        
-        # Запускаем фоновую задачу для обработки взаимодействия пользователя с задачей (просмотр)
-        process_task_interaction.delay(
-            user_id=task.author_id,
-            task_id=task_id,
-            event_type="view",
-            weight=0.5,
-        )
-        
-        return TaskGet(
-            id=task.id,
-            title=task.title,
-            description=task.description,
-            author_id=task.author_id
-        )
-        
-        
-
-    raise HTTPException(
-        status_code=404,
-        detail="Задача с указанным ID не найдена"
+    # Запускаем фоновую задачу для обработки взаимодействия пользователя с задачей (просмотр)
+    process_task_interaction.delay(
+        user_id=current_user.id,
+        task_id=task.id,
+        event_type="view",
+        weight=0.5,
+    )
+    
+    return TaskGet(
+        id=task.id,
+        title=task.title,
+        description=task.description,
+        author_id=task.author_id
     )
     
     
@@ -174,26 +163,10 @@ async def like_task(
 async def update_task(
     task_id: int = Path(...),
     task_update: typing.Optional[TaskUpdate] = None,
-    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-    request: Request = None
+    task: Task = Depends(check_owner)
 ):
     """Обновление задачи"""
-
-    task = await session.execute(select(Task).where(Task.id == task_id))
-    task = task.scalar_one_or_none()
-
-    if task is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Задача с указанным ID не найдена"
-        )
-    
-    if task.author_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="У вас нет прав на изменение этой задачи"
-        )
 
     update_dict = task_update.model_dump(exclude_unset=True) if task_update else {}
     
@@ -231,25 +204,15 @@ async def update_task(
 async def delete_task(
     task_id: int = Path(...),
     request: Request = None,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
+    task: Task = Depends(check_owner)
 ):
     """Удаление задачи"""
 
-    task = await session.execute(select(Task).where(Task.id == task_id))
-    task = task.scalar_one_or_none()
-
-    if task is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Задача с указанным ID не найдена"
-        )
-
-    if task.author_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="У вас нет прав на удаление этой задачи"
-        )
+    # Удаляем вызовы взаимодействия текущей задачи
+    delete_task_interactions.delay(
+        task_id=task_id
+    )
 
     await session.execute(
         delete(Task).where(Task.id == task_id)
@@ -258,9 +221,6 @@ async def delete_task(
     # Удаляем данные из векторной базы и семантического поиска
     semantic_search_service = request.app.state.semantic_search_service
     await semantic_search_service.delete(item_id=str(task_id), session=session)
-    
-    # Запускаем фоновую задачу для удаления всех взаимодействий для этой задачи в рекомендательной системе
-    delete_task_interactions.delay(task_id=task_id)
     
     await session.commit()
     

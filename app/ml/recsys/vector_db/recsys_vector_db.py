@@ -8,6 +8,7 @@ import redis
 
 import pickle
 
+from app.core import config
 
 class RecSysVectorDB:
     """Класс для хранения эмбеддингов задач."""
@@ -39,7 +40,7 @@ class RecSysVectorDB:
             self.redis_client.set(self.ids_key, ",".join(self.ids))
         
         
-    async def search(self, vector: np.ndarray, top_k: int = 5) -> list[tuple[str, float]]:
+    async def search(self, vector: np.ndarray, top_k: int = config.DEFAULT_TOP_K) -> list[tuple[str, float]]:
         """Ищем похожие векторы изображений и возвращаем их IDs."""
         if self.redis_client:
             # Загружаем индекс и IDs из Redis

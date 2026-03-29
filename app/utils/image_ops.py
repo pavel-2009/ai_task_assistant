@@ -1,11 +1,11 @@
-"""
+﻿"""
 Операции с изображениями
 """
 
-import numpy as np
 import cv2
+import numpy as np
 
-import typing
+from app.core import config
 
 
 def validate_image(image_bytes: bytes) -> bool:
@@ -16,11 +16,11 @@ def validate_image(image_bytes: bytes) -> bool:
 
     if image is None:
         return False
-    
+
     return True
 
 
-def resize_image(image_bytes: bytes, max_size: int = 1024) -> bytes:
+def resize_image(image_bytes: bytes, max_size: int = config.MAX_IMAGE_SIZE_PX) -> bytes:
     """Изменение размера изображения, если оно превышает max_size по ширине или высоте"""
 
     image_array = np.frombuffer(image_bytes, dtype=np.uint8)
@@ -35,6 +35,6 @@ def resize_image(image_bytes: bytes, max_size: int = 1024) -> bytes:
 
         img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_AREA)
 
-    image_resized = cv2.imencode('.jpeg', img)[1].tobytes()
+    image_resized = cv2.imencode(".jpeg", img)[1].tobytes()
 
     return image_resized

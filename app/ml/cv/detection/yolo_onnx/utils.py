@@ -3,11 +3,13 @@
 """
 
 import hashlib
-import numpy as np
-import cv2
 from pathlib import Path
 from typing import Dict, List, Tuple
-from .config import CACHE_SIZE, VISUALIZATION_DIR
+
+import cv2
+import numpy as np
+
+from .config import CACHE_SIZE, METRICS_WINDOW, VISUALIZATION_DIR
 
 class FrameCache:
     """Кэширование результатов для похожих кадров"""
@@ -42,7 +44,7 @@ class FrameCache:
 class MetricsCollector:
     """Сбор и анализ метрик производительности"""
     
-    def __init__(self, window_size: int = 100):
+    def __init__(self, window_size: int = METRICS_WINDOW):
         self.inference_times = []
         self.preprocess_times = []
         self.postprocess_times = []

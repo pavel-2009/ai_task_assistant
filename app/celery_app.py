@@ -1,28 +1,22 @@
-"""
+﻿"""
 Конфигурация и инициализация Celery для асинхронного выполнения задач в фоновом режиме.
 """
 
 from celery import Celery
 from celery.schedules import crontab
-import os
-from dotenv import load_dotenv
 
-
-load_dotenv()
-
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0")
+from app.core import config
 
 
 celery_app = Celery(
     "ai_task_assistant",
-    broker=CELERY_BROKER_URL,
-    backend=CELERY_RESULT_BACKEND,
+    broker=config.CELERY_BROKER_URL,
+    backend=config.CELERY_RESULT_BACKEND,
     include=[
         "app.ml.cv.tasks",
         "app.ml.nlp.tasks",
-        "app.ml.recsys.tasks"
-    ]
+        "app.ml.recsys.tasks",
+    ],
 )
 
 celery_app.conf.update(
@@ -39,6 +33,6 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     "reindex-tasks-every-day": {
         "task": "train_collaborative_filtering_model",
-        "schedule": crontab(hour=0, minute=0),  # Каждый день в полночь
+        "schedule": crontab(hour=0, minute=0),
     },
 }

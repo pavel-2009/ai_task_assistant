@@ -1,59 +1,45 @@
-"""
+﻿"""
 Модуль для аутентификации пользователей.
 """
 
-import jwt
-from jwt.exceptions import InvalidTokenError
-import bcrypt
 from datetime import datetime, timedelta
-from fastapi import HTTPException, Depends
+
+import bcrypt
+import jwt
+from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
+from jwt.exceptions import InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import os
-from dotenv import load_dotenv
-
-from app.db_models import User
+from app.core import config
 from app.db import get_async_session
-
-load_dotenv()
-SECRET_KEY = os.getenv("SECRET_KEY")
+from app.db_models import User
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-def hash_password(password: str) -> str:
-    """Хэширование пароля с bcrypt"""
-
-    salt = bcrypt.gensalt()
-
-    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
-
-
-def verify_password(password: str, hashed_password: str) -> bool:
-    """Проверка пароля"""
-
-    return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
-
-
-def create_access_token(user_id: int, expires_delta: timedelta = timedelta(minutes=30)) -> str:
+def create_access_token(user_id: int, expires_delta: timedelta | None = None) -> str:
     """Создание JWT токена для пользователя"""
 
+    token_ttl = expires_delta or timedelta(minutes=config.JWT_EXPIRE_MINUTES)
     payload = {
         "user_id": user_id,
-        "exp": datetime.utcnow() + expires_delta
+        "exp": datetime.utcnow() + token_ttl,
     }
 
-    return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    return jwt.encode(payload, config.SECRET_KEY, algorithm=config.JWT_ALGORITHM)
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(get_async_session)) -> User:
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session),
+) -> User:
     """Получение текущего пользователя по JWT токену"""
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.JWT_ALGORITHM])
         user_id = payload.get("user_id")
 
         if user_id is None:
@@ -67,5 +53,5 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSe
 
         return user
 
-    except InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+    except InvalidTokenError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
