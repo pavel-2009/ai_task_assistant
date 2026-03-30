@@ -3,9 +3,19 @@
 """
 
 from app.celery_app import celery_app
-from app.services import get_inference, get_segmentation, get_yolo
+from app.services import (
+    get_inference,
+    get_segmentation,
+    get_yolo,
+    get_image_embedding,
+    get_drift_detector,
+    get_redis
+)
 
 from pathlib import Path
+from datetime import datetime
+
+import redis
 
 
 @celery_app.task(name="predict_avatar_class")
@@ -60,3 +70,26 @@ def segment_image_task(task_id: int, image_path: str) -> bytes:
     
     except Exception as e:
         raise
+    
+    
+@celery_app.task(name="check_avatar_drift")
+def check_avatar_drift(image_path: str):
+    """Фоновая проверка дрейфа для загруженного аватара"""
+    
+    embedding_service = get_image_embedding()
+    
+    with open(image_path, "rb") as f:
+        image_bytes = f.read()
+        
+    embedding = embedding_service.get_embedding(image_bytes)
+    
+    detector = get_drift_detector()
+    
+    detector.add_embeddings([embedding])
+    
+    drift_result = detector.calculate_drift([embedding])
+    
+    if drift_result["drift_detected"]:
+        redis_client: redis.Redis = get_redis()
+        
+        redis_client.set("drift_detected", f"{datetime.now()}: {drift_result}")

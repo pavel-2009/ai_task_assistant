@@ -19,6 +19,7 @@ from app.ml.nlp.llm_service import LLMService
 from app.ml.recsys.content_based import ContentBasedRecommender
 from app.ml.recsys.collaborative_filtering import CollaborativeFilteringRecommender
 from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
+from app.ml.monitoring.drift_detector import DriftDetector
 
 
 import redis.asyncio as redis
@@ -34,6 +35,12 @@ async def init_services(
     inference_idx_to_class: dict = None,
 ) -> None:
     """Инициализирует все сервисы один раз при старте приложения."""
+    
+    # Redis
+    if redis_client is None:
+        redis_client = redis.Redis(host="redis", port=6379, db=0)
+        
+    _services["redis"] = redis_client
     
     # CV сервисы
     _services["inference"] = InferenceService(
@@ -90,6 +97,9 @@ async def init_services(
         semantic_search_service=_services["semantic_search"],
         redis=redis_client,
     )
+    
+    # Детектор дрейфа
+    _services["drift_detector"] = DriftDetector()
 
 
 def get_service(name: str) -> object:
@@ -102,6 +112,9 @@ def get_service(name: str) -> object:
         )
     return _services[name]
 
+
+def get_redis() -> redis.Redis:
+    return get_service("redis")
 
 def get_inference() -> InferenceService:
     return get_service("inference")
@@ -141,3 +154,6 @@ def get_recsys_vector_db() -> RecSysVectorDB:
 
 def get_collaborative_filtering_recommender() -> CollaborativeFilteringRecommender:
     return get_service("collaborative_filtering_recommender")
+
+def get_drift_detector() -> DriftDetector:
+    return get_service("drift_detector")
