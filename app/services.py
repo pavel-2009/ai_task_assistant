@@ -95,7 +95,7 @@ async def init_services(
     _services["embedding"] = EmbeddingService()
     _services["ner"] = NerService()
     _services["llm"] = LLMService()
-    await _services["llm"].warmup()
+    # Примечание: warmup теперь вызывается отдельно как background task, чтобы не блокировать запуск
     
     # Vector DB и семантический поиск
     _services["vector_db"] = VectorDB(

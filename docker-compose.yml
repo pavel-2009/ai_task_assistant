@@ -1,9 +1,38 @@
-version: '0.1'
+version: '3.9'
 
 volumes:
   torch_cache:
+  ollama_data:
 
 services:
+  redis:
+    image: redis:latest
+    container_name: ai_task_assistant_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai_task_assistant_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
   api:
     build: .
     container_name: ai_task_assistant
@@ -14,26 +43,36 @@ services:
       - ./checkpoints:/app/checkpoints
       - ./test.db:/app/test.db
       - torch_cache:/root/.cache/torch
-
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
     env_file:
       - .env
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    command: sh -c "sleep 10 && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
-    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-  redis:
-    image: redis:latest
-    container_name: ai_task_assistant_redis
-    ports:
-      - "6379:6379"
-    
   celery:
     build: .
     container_name: ai_task_assistant_celery
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
     env_file:
       - .env
-    command: celery -A app.celery_app worker -B --loglevel=info
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    command: sh -c "sleep 10 && celery -A app.celery_app worker -B --loglevel=info"
     volumes:
       - ./avatars:/app/avatars
       - ./checkpoints:/app/checkpoints

@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import asyncio
 import time
 from contextlib import asynccontextmanager
 
@@ -60,6 +59,14 @@ async def lifespan(app: FastAPI):
         app.state.rag_service = get_rag()
         app.state.drift_detector = get_drift_detector()
         app.state.redis_client = get_redis()
+
+        # Запуск warmup LLM в фоне через Celery (не блокирует запуск API)
+        try:
+            from app.ml.nlp.tasks import warmup_llm
+            warmup_llm.delay()
+            logger.info("LLM warmup task scheduled")
+        except Exception as warmup_exc:
+            logger.warning("Could not schedule LLM warmup task: %s", warmup_exc)
 
         # Запуск фоновых задач (может быть недоступно в тестовом окружении)
         try:
