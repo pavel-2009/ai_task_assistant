@@ -1,11 +1,18 @@
-﻿"""
+"""
 Конфигурация и инициализация Celery для асинхронного выполнения задач в фоновом режиме.
 """
 
+import asyncio
+import logging
+
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init
 
 from app.core import config
+from app.services import ensure_services_initialized
+
+logger = logging.getLogger(__name__)
 
 
 celery_app = Celery(
@@ -36,3 +43,13 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=0, minute=0),
     },
 }
+
+
+@worker_process_init.connect
+def init_services_for_worker(**kwargs):
+    """Единая инициализация сервисов для каждого процесса Celery worker."""
+    try:
+        asyncio.run(ensure_services_initialized(use_onnx=config.USE_ONNX))
+        logger.info("Celery services initialized")
+    except Exception as exc:
+        logger.error("Celery services initialization failed: %s", exc, exc_info=True)
