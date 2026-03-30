@@ -5,9 +5,16 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+import asyncio
+import logging
 import os
+from pathlib import Path
 
+import redis.asyncio as redis
+from redis.exceptions import RedisError
+from sqlalchemy import select
+
+from app.core import config
 from app.db import async_session
 from app.db_models import Task
 
@@ -27,16 +34,20 @@ from app.ml.recsys.collaborative_filtering import CollaborativeFilteringRecommen
 from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
 from app.ml.monitoring.drift_detector import DriftDetector
 
-
-import redis.asyncio as redis
-from redis.exceptions import RedisError
-
-import logging
-
 logger = logging.getLogger(__name__)
 
 
 _services: dict = {}
+_initialized = False
+_init_lock = asyncio.Lock()
+
+
+def default_inference_checkpoint_path() -> str:
+    return str(Path(__file__).resolve().parent.parent / "checkpoints" / "model.pth")
+
+
+def default_inference_idx_to_class() -> dict[int, str]:
+    return {0: "cat", 1: "dog", 2: "house"}
 
 
 async def init_services(
@@ -46,11 +57,16 @@ async def init_services(
     inference_idx_to_class: dict = None,
 ) -> None:
     """Инициализирует все сервисы один раз при старте приложения."""
-    
+    global _initialized
+
+    if _initialized:
+        return
+
     # Redis
     if redis_client is None:
         try:
-            redis_client = redis.Redis(host="redis", port=6379, db=0)
+            redis_client = redis.from_url(config.REDIS_URL)
+            await redis_client.ping()
         except RedisError:
             redis_client = None
             logger.warning("Не удалось подключиться к Redis. Некоторые функции будут недоступны.")
@@ -79,6 +95,7 @@ async def init_services(
     _services["embedding"] = EmbeddingService()
     _services["ner"] = NerService()
     _services["llm"] = LLMService()
+    await _services["llm"].warmup()
     
     # Vector DB и семантический поиск
     _services["vector_db"] = VectorDB(
@@ -126,12 +143,36 @@ async def init_services(
         for task in tasks.scalars():
             if os.path.exists(task.avatar_file):
                 with open(task.avatar_file, "rb") as f:
-                    emb = get_image_embedding().get_embedding(f.read())
+                    emb = _services["image_embedding"].get_embedding(f.read())
                     reference_embeddings.append(emb)
         
         if reference_embeddings:
             for emb in reference_embeddings:
                 _services["drift_detector"].add_embedding(emb)
+
+    _initialized = True
+
+
+async def ensure_services_initialized(
+    use_onnx: bool = False,
+    redis_client: redis.Redis | None = None,
+    inference_checkpoint_path: str | None = None,
+    inference_idx_to_class: dict | None = None,
+) -> None:
+    """Потокобезопасная инициализация сервисов для FastAPI и Celery."""
+    if _initialized:
+        return
+
+    async with _init_lock:
+        if _initialized:
+            return
+
+        await init_services(
+            use_onnx=use_onnx,
+            redis_client=redis_client,
+            inference_checkpoint_path=inference_checkpoint_path or default_inference_checkpoint_path(),
+            inference_idx_to_class=inference_idx_to_class or default_inference_idx_to_class(),
+        )
 
 
 def get_service(name: str) -> object:

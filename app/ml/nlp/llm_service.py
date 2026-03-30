@@ -88,3 +88,22 @@ class LLMService:
             return self.model in models
         except Exception:
             return False
+
+    async def warmup(self) -> None:
+        """
+        Гарантирует, что модель доступна в Ollama при старте.
+        Если модели нет локально — пробует загрузить ее.
+        """
+        if self.client is None:
+            logger.warning("Skip LLM warmup: package 'ollama' is not installed")
+            return
+
+        try:
+            if await self.is_available():
+                return
+
+            logger.info("Ollama model '%s' not found locally. Pulling...", self.model)
+            await self.client.pull(self.model)
+            logger.info("Ollama model '%s' is ready", self.model)
+        except Exception as exc:
+            logger.warning("LLM warmup failed for model '%s': %s", self.model, exc)

@@ -10,12 +10,11 @@ import sys
 import asyncio
 import time
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Request, Response, status
 
 from app.core import config
-from app.db import close_redis, get_redis, engine
+from app.db import close_redis, engine
 from app.error_handlers import register_exception_handlers
 from app.celery_app import celery_app
 from app.services import (
@@ -25,8 +24,9 @@ from app.services import (
     get_rag,
     get_semantic_search,
     get_vector_db,
-    init_services,
-    get_drift_detector
+    ensure_services_initialized,
+    get_drift_detector,
+    get_redis,
 )
 
 from .ml.nlp.tasks import reindex_tasks
@@ -45,29 +45,10 @@ _background_tasks = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    
-    redis_client = None
-
     try:
-        logger.info("Connecting Redis...")
-        try:
-            redis_client = await get_redis()
-            app.state.redis_client = redis_client
-            logger.info("Redis connected successfully")
-        except Exception as redis_exc:
-            logger.warning("Could not connect to Redis: %s (continuing without Redis)", redis_exc)
-            app.state.redis_client = None
-
         logger.info("Initializing all services...")
-
-        inference_checkpoint_path = Path(__file__).parent.parent / "checkpoints" / "model.pth"
-        inference_idx_to_class = {0: "cat", 1: "dog", 2: "house"}
-
-        await init_services(
+        await ensure_services_initialized(
             use_onnx=config.USE_ONNX,
-            redis_client=redis_client,
-            inference_checkpoint_path=str(inference_checkpoint_path),
-            inference_idx_to_class=inference_idx_to_class,
         )
         logger.info("All services initialized successfully")
 
@@ -78,6 +59,7 @@ async def lifespan(app: FastAPI):
         app.state.llm_service = get_llm()
         app.state.rag_service = get_rag()
         app.state.drift_detector = get_drift_detector()
+        app.state.redis_client = get_redis()
 
         # Запуск фоновых задач (может быть недоступно в тестовом окружении)
         try:
