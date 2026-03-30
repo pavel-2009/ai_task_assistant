@@ -25,7 +25,7 @@ def test_upload_avatar():
     """Проверка загрузки аватара для задачи"""
 
     username = f"testuser_{uuid.uuid4().hex[:8]}"
-    password = "testpassword"
+    password = "TestPass123!"
 
     with TestClient(app) as client:
         registration_data = {

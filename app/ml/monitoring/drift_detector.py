@@ -41,16 +41,16 @@ class DriftDetector:
         X = np.vstack([self.reference_embeddings, current_embedding])
         
         # Создаем метки классов для обучения классификатора (0 - референс, 1 - текущие данные)
-        y = np.array([0] * len(self.reference_embeddings) + [1] * len(current_embedding))  # 0 - референс, 1 - текущие данные
+        y = np.array([0] * len(self.reference_embeddings) + [1] * len(current_embedding))
         
-        X, y = train_test_split(X, y, test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
-        self._classifier.fit(X, y)
+        self._classifier.fit(X_train, y_train)
         
-        # Предсказываем метки классов для текущих данных
-        y_pred = self._classifier.predict(current_embedding)
+        # Предсказываем метки классов для тестового набора
+        y_pred = self._classifier.predict(X_test)
         
-        accuracy = accuracy_score([1] * len(current_embedding), y_pred)
+        accuracy = accuracy_score(y_test, y_pred)
         
         drift_score = accuracy - 0.5  # Дрейф определяется как отклонение от случайного угадывания
         
@@ -63,14 +63,13 @@ class DriftDetector:
         }
     
     
-    def add_embeddings(self, new_embeddings: list[np.ndarray]):
-        """Добавляет новые эмбеддинги в референсные данные."""
+    def add_embedding(self, new_embedding: np.ndarray):
+        """Добавляет новый эмбеддинг в референсные данные."""
         if self.reference_embeddings is None:
-            self.reference_embeddings = new_embeddings
+            self.reference_embeddings = [new_embedding]
         else:
-            self.reference_embeddings.extend(new_embeddings)
-            
-            
+            self.reference_embeddings.append(new_embedding)
+
     def get_status(self) -> dict:
         """Возвращает текущий статус детектора дрейфа."""
         return {

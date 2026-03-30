@@ -16,7 +16,7 @@ def test_user_registration_and_login():
     """Тестирование регистрации и входа пользователя"""
 
     username = f"testuser_{uuid.uuid4().hex[:8]}"
-    password = "testpassword"
+    password = "TestPass123!"
 
     with TestClient(app) as client:
         registration_data = {

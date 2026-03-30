@@ -2,6 +2,8 @@
 Асинхронные задачи для рекомендательной системы.
 """
 
+import logging
+
 from app.celery_app import celery_app
 from app.db_models import Interaction, Event
 
@@ -16,6 +18,9 @@ import asyncio
 
 from app.services import get_collaborative_filtering_recommender
 from app.db import async_session
+
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="process_task_interaction")
@@ -92,15 +97,24 @@ async def _delete_task_interactions_async(task_id: int):
 @celery_app.task(name="train_collaborative_filtering_model")
 def train_collaborative_filtering_model():
     """Обучение модели коллаборативной фильтрации с сохранением модели в Redis."""
-    asyncio.run(_train_collaborative_filtering_model_async())
+    try:
+        asyncio.run(_train_collaborative_filtering_model_async())
+    except RuntimeError as e:
+        logger.warning(f"Could not train collaborative filtering model (service may not be initialized): {e}")
+    except Exception as e:
+        logger.error(f"Error during collaborative filtering model training: {e}", exc_info=True)
 
 
 async def _train_collaborative_filtering_model_async():
     """Асинхронная реализация обучения модели коллаборативной фильтрации."""
+    
+    try:
+        collaborative_filtering_recommender = get_collaborative_filtering_recommender()
+    except RuntimeError as e:
+        logger.warning(f"Collaborative filtering recommender service not initialized: {e}")
+        return
 
     model = AlternatingLeastSquares(factors=50, regularization=0.01, iterations=20)
-    
-    collaborative_filtering_recommender = get_collaborative_filtering_recommender()
     
     async with async_session() as session:
         user_item_matrix, user_to_idx, task_to_idx, unique_users, unique_tasks = await collaborative_filtering_recommender.build_user_item_matrix(session)

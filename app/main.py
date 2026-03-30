@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import signal
 import asyncio
 import time
 from contextlib import asynccontextmanager
@@ -27,6 +26,7 @@ from app.services import (
     get_semantic_search,
     get_vector_db,
     init_services,
+    get_drift_detector
 )
 
 from .ml.nlp.tasks import reindex_tasks
@@ -41,28 +41,22 @@ _background_tasks = {
     "reindex_tasks": None,
     "train_cf": None,
 }
-_shutdown_event = asyncio.Event()
-
-
-def _handle_shutdown_signal(signum, frame):
-    """Обработчик сигналов SIGTERM и SIGINT."""
-    logger.info(f"Получен сигнал завершения ({signal.Signals(signum).name}). Инициализирую graceful shutdown...")
-    _shutdown_event.set()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Регистрируем обработчики сигналов
-    signal.signal(signal.SIGTERM, _handle_shutdown_signal)
-    signal.signal(signal.SIGINT, _handle_shutdown_signal)
     
     redis_client = None
 
     try:
         logger.info("Connecting Redis...")
-        redis_client = await get_redis()
-        app.state.redis_client = redis_client
-        logger.info("Redis connected successfully")
+        try:
+            redis_client = await get_redis()
+            app.state.redis_client = redis_client
+            logger.info("Redis connected successfully")
+        except Exception as redis_exc:
+            logger.warning("Could not connect to Redis: %s (continuing without Redis)", redis_exc)
+            app.state.redis_client = None
 
         logger.info("Initializing all services...")
 
@@ -83,14 +77,20 @@ async def lifespan(app: FastAPI):
         app.state.semantic_search_service = get_semantic_search()
         app.state.llm_service = get_llm()
         app.state.rag_service = get_rag()
+        app.state.drift_detector = get_drift_detector()
 
-        logger.info("Starting background task for reindexing...")
-        _background_tasks["reindex_tasks"] = reindex_tasks.delay()
-        logger.info("Background task for reindexing started successfully")
+        # Запуск фоновых задач (может быть недоступно в тестовом окружении)
+        try:
+            logger.info("Starting background task for reindexing...")
+            _background_tasks["reindex_tasks"] = reindex_tasks.delay()
+            logger.info("Background task for reindexing started successfully")
 
-        logger.info("Starting background task for training collaborative filtering model...")
-        _background_tasks["train_cf"] = train_collaborative_filtering_model.delay()
-        logger.info("Background task for training collaborative filtering model started successfully")
+            logger.info("Starting background task for training collaborative filtering model...")
+            _background_tasks["train_cf"] = train_collaborative_filtering_model.delay()
+            logger.info("Background task for training collaborative filtering model started successfully")
+        except Exception as bg_exc:
+            logger.warning("Could not start background tasks (Redis may be unavailable): %s", bg_exc)
+            # Не прерываем запуск приложения, продолжаем работу без фоновых задач
 
     except Exception as exc:
         logger.error("Error during startup: %s", exc, exc_info=True)
@@ -143,7 +143,7 @@ app = FastAPI(lifespan=lifespan)
 register_exception_handlers(app)
 
 
-from .routers import auth, avatars, nlp, rag, streaming, tasks
+from .routers import auth, avatars, nlp, rag, streaming, tasks, monitoring
 
 app.include_router(auth.router)
 app.include_router(tasks.router)
@@ -151,6 +151,7 @@ app.include_router(avatars.router)
 app.include_router(streaming.router)
 app.include_router(nlp.router)
 app.include_router(rag.router)
+app.include_router(monitoring.router)
 
 
 async def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
@@ -177,6 +178,10 @@ async def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
     ner_ready = bool(ner_service is not None and ner_service.is_ready)
     llm_service = getattr(app.state, "llm_service", None)
     rag_service = getattr(app.state, "rag_service", None)
+    
+    drift_detector = getattr(app.state, "drift_detector", None)
+    drift_status = drift_detector.get_status() if drift_detector else {}
+
 
     return {
         "embedding": {
@@ -206,6 +211,11 @@ async def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
             "ready": rag_service is not None,
             "llm_model": config.OLLAMA_MODEL if rag_service is not None else None,
         },
+        "data_drift": {
+            "ready": drift_detector is not None,
+            "drift_detected": drift_status.get("drift_detected", False),
+            "drift_score": drift_status.get("drift_score", 0.0),
+        }
     }
 
 

@@ -5,6 +5,12 @@
 
 from __future__ import annotations
 
+from sqlalchemy import select
+import os
+
+from app.db import async_session
+from app.db_models import Task
+
 from app.ml.cv.classification.inference_service import InferenceService
 from app.ml.cv.detection.yolo_service import YoloService
 from app.ml.cv.detection.yolo_onnx_service import YoloONNXService
@@ -23,6 +29,11 @@ from app.ml.monitoring.drift_detector import DriftDetector
 
 
 import redis.asyncio as redis
+from redis.exceptions import RedisError
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 _services: dict = {}
@@ -38,13 +49,20 @@ async def init_services(
     
     # Redis
     if redis_client is None:
-        redis_client = redis.Redis(host="redis", port=6379, db=0)
+        try:
+            redis_client = redis.Redis(host="redis", port=6379, db=0)
+        except RedisError:
+            redis_client = None
+            logger.warning("Не удалось подключиться к Redis. Некоторые функции будут недоступны.")
+        except Exception as e:
+            redis_client = None
+            logger.error(f"Ошибка при инициализации Redis: {e}")
         
     _services["redis"] = redis_client
     
     # CV сервисы
     _services["inference"] = InferenceService(
-        checkpoint_path=inference_checkpoint_path,
+        checkpoints_path=inference_checkpoint_path,
         idx_to_class=inference_idx_to_class or {}
     )
     
@@ -100,6 +118,20 @@ async def init_services(
     
     # Детектор дрейфа
     _services["drift_detector"] = DriftDetector()
+    
+    # Загружаем референсные эмбеддинги всех существующих аватаров
+    async with async_session() as session:
+        tasks = await session.execute(select(Task).where(Task.avatar_file.isnot(None)))
+        reference_embeddings = []
+        for task in tasks.scalars():
+            if os.path.exists(task.avatar_file):
+                with open(task.avatar_file, "rb") as f:
+                    emb = get_image_embedding().get_embedding(f.read())
+                    reference_embeddings.append(emb)
+        
+        if reference_embeddings:
+            for emb in reference_embeddings:
+                _services["drift_detector"].add_embedding(emb)
 
 
 def get_service(name: str) -> object:

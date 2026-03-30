@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import update, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +20,9 @@ from app.services import get_ner, get_semantic_search, get_embedding, get_recsys
 from app.db import async_session
 
 from app.db_models import Task, Text
+
+
+logger = logging.getLogger(__name__)
 from app.ml.nlp.embedding_service import EmbeddingService
 from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
 from app.ml.cv.embedding.image_embedding_service import ImageEmbeddingService
@@ -62,13 +67,22 @@ async def _process_task_tags_and_embedding_async(task_id: int, title: str, descr
 @celery_app.task(name="reindex_tasks")
 def reindex_tasks():
     """Фоновая задача для реиндексации задач при старте приложения."""
-    asyncio.run(_reindex_tasks_async())
+    try:
+        asyncio.run(_reindex_tasks_async())
+    except RuntimeError as e:
+        logger.warning(f"Could not reindex tasks (service may not be initialized): {e}")
+    except Exception as e:
+        logger.error(f"Error during task reindexing: {e}", exc_info=True)
 
 
 async def _reindex_tasks_async():
     """Асинхронная реализация реиндексации задач."""
     
-    semantic_search_service = get_semantic_search()
+    try:
+        semantic_search_service = get_semantic_search()
+    except RuntimeError as e:
+        logger.warning(f"Semantic search service not initialized: {e}")
+        return
     
     async with async_session() as session:
         result = await session.execute(select(Task.id, Task.title, Task.description))

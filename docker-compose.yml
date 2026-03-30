@@ -33,7 +33,7 @@ services:
       - redis
     env_file:
       - .env
-    command: celery -A app.celery_app worker beat  --loglevel=info
+    command: celery -A app.celery_app worker -B --loglevel=info
     volumes:
       - ./avatars:/app/avatars
       - ./checkpoints:/app/checkpoints
