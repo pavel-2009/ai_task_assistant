@@ -16,6 +16,7 @@ import torch
 import asyncio
 
 from app.celery_app import celery_app
+from app.celery_metrics import track_celery_task
 from app.services import get_ner, get_semantic_search, get_embedding, get_recsys_vector_db, get_image_embedding
 from app.db import async_session
 
@@ -65,6 +66,7 @@ async def _process_task_tags_and_embedding_async(task_id: int, title: str, descr
     
     
 @celery_app.task(name="reindex_tasks")
+@track_celery_task("reindex_tasks")
 def reindex_tasks():
     """Фоновая задача для реиндексации задач при старте приложения."""
     try:
@@ -154,6 +156,7 @@ async def _update_recommendations_for_task_async(task_id: int):
 
 
 @celery_app.task(name="warmup_llm", bind=True, max_retries=10)
+@track_celery_task("warmup_llm")
 def warmup_llm(self):
     """Фоновая задача для прогрева LLM модели с повторами."""
     

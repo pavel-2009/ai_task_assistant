@@ -5,6 +5,7 @@
 import logging
 
 from app.celery_app import celery_app
+from app.celery_metrics import track_celery_task
 from app.services import (
     get_inference,
     get_segmentation,
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="predict_avatar_class")
+@track_celery_task("predict_avatar_class")
 def predict_avatar_class(task_id: int, image_path: str) -> dict:
     """Фоновая задача для предсказания класса аватарки задачи."""
     
@@ -45,6 +47,7 @@ def predict_avatar_class(task_id: int, image_path: str) -> dict:
 
 
 @celery_app.task(name="detect_and_visualize_task")
+@track_celery_task("detect_and_visualize_task")
 def detect_and_visualize_task(task_id: int, image_path: str) -> dict:
     """Фоновая задача для обнаружения объектов на изображении и сохранения визуализации."""
     
