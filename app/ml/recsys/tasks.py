@@ -5,6 +5,7 @@
 import logging
 
 from app.celery_app import celery_app
+from app.celery_metrics import track_celery_task
 from app.db_models import Interaction, Event
 
 from implicit.als import AlternatingLeastSquares
@@ -95,6 +96,7 @@ async def _delete_task_interactions_async(task_id: int):
     
     
 @celery_app.task(name="train_collaborative_filtering_model")
+@track_celery_task("train_collaborative_filtering_model")
 def train_collaborative_filtering_model():
     """Обучение модели коллаборативной фильтрации с сохранением модели в Redis."""
     try:
