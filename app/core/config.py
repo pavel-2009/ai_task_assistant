@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     YOLO_IOU_THRESHOLD: float = 0.55
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_PERIOD_SECONDS: int = 60
+    METRICS_ENABLED: bool = True
+    METRICS_PATH: str = "/metrics"
 
     LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
     LLM_MODEL: str = "meta-llama/llama-3.3-8b-instruct:free"
