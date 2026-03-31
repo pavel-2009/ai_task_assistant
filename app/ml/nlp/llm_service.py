@@ -100,10 +100,12 @@ class LLMService:
 
         try:
             if await self.is_available():
+                logger.info("Ollama model '%s' is already available", self.model)
                 return
 
             logger.info("Ollama model '%s' not found locally. Pulling...", self.model)
             await self.client.pull(self.model)
             logger.info("Ollama model '%s' is ready", self.model)
         except Exception as exc:
-            logger.warning("LLM warmup failed for model '%s': %s", self.model, exc)
+            logger.error("LLM warmup failed for model '%s': %s", self.model, exc, exc_info=True)
+            raise

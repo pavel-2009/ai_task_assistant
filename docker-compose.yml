@@ -3,8 +3,10 @@ version: '3.9'
 volumes:
   torch_cache:
   ollama_data:
+  db_data:
 
 services:
+  # 1. Redis
   redis:
     image: redis:latest
     container_name: ai_task_assistant_redis
@@ -15,27 +17,26 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 10s
-    
+
+  # 2. Ollama - просто запускаем, модель скачаем руками
   ollama:
     image: ollama/ollama:latest
     container_name: ai_task_assistant_ollama
     ports:
       - "11434:11434"
+    network_mode: "host"
     volumes:
       - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0:11434
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 45s
+    restart: unless-stopped
+    dns:
+    - 8.8.8.8
+    - 8.8.4.4
+    - 1.1.1.1
 
+  # 3. API
   api:
     build: .
-    container_name: ai_task_assistant
+    container_name: ai_task_assistant_api
     ports:
       - "8000:8000"
     volumes:
@@ -52,14 +53,9 @@ services:
       - .env
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-    command: sh -c "sleep 10 && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    restart: always
 
+  # 4. Celery
   celery:
     build: .
     container_name: ai_task_assistant_celery
@@ -72,9 +68,10 @@ services:
       - .env
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-    command: sh -c "sleep 10 && celery -A app.celery_app worker -B --loglevel=info"
+    command: celery -A app.celery_app worker -B --loglevel=info
     volumes:
       - ./avatars:/app/avatars
       - ./checkpoints:/app/checkpoints
       - ./test.db:/app/test.db
       - torch_cache:/root/.cache/torch
+    restart: always

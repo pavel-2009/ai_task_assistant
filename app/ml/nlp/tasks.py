@@ -153,15 +153,11 @@ async def _update_recommendations_for_task_async(task_id: int):
             rs_vector_db.add_vector(vector=embedding, task_id=str(task_id))
 
 
-@celery_app.task(name="warmup_llm", bind=True)
-def warmup_llm():
+@celery_app.task(name="warmup_llm", bind=True, max_retries=10)
+def warmup_llm(self):
     """Фоновая задача для прогрева LLM модели с повторами."""
     
-    max_retries = 10
-    
     retry_delay = 30  # секунд
-    
-    retry_count = 0
     
     try:
         from app.services import get_llm
@@ -169,11 +165,7 @@ def warmup_llm():
         asyncio.run(llm_service.warmup())
         logger.info("LLM warmup completed successfully")
     except Exception as exc:
-        logger.warning("LLM warmup attempt failed: %s. Retry in 30 seconds...", exc)
-        # Повторяем через 30 секунд до 10 раз
-        if retry_count < max_retries:
-            retry_count += 1
-            warmup_llm.apply_async(countdown=retry_delay)
-        else:
-            logger.error("LLM warmup failed after %d attempts: %s", max_retries, exc)
+        logger.warning("LLM warmup attempt failed: %s. Retry in %d seconds...", exc, retry_delay)
+        # Используем встроенный механизм retry Celery
+        raise self.retry(exc=exc, countdown=retry_delay)
         
