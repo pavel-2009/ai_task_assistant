@@ -7,17 +7,41 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Histogram, REGISTRY
 
 
-celery_task_duration = Histogram(
+def _get_or_create_histogram(name: str, documentation: str, labelnames: list, buckets: list = None):
+    """Get histogram from registry or create if not exists."""
+    try:
+        return Histogram(name, documentation, labelnames, buckets=buckets)
+    except ValueError:
+        # Уже зарегистрирован, извлекаем из реестра
+        for collector in REGISTRY._collector_to_names:
+            if getattr(collector, '_name', None) == name:
+                return collector
+        raise
+
+
+def _get_or_create_counter(name: str, documentation: str, labelnames: list):
+    """Get counter from registry or create if not exists."""
+    try:
+        return Counter(name, documentation, labelnames)
+    except ValueError:
+        # Уже зарегистрирован, извлекаем из реестра
+        for collector in REGISTRY._collector_to_names:
+            if getattr(collector, '_name', None) == name:
+                return collector
+        raise
+
+
+celery_task_duration = _get_or_create_histogram(
     "celery_task_duration_seconds",
     "Celery task duration in seconds",
     ["task_name"],
     buckets=[0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0],
 )
 
-celery_task_total = Counter(
+celery_task_total = _get_or_create_counter(
     "celery_task_total",
     "Total number of Celery task executions",
     ["task_name", "status"],

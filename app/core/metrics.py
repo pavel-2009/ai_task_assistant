@@ -3,15 +3,40 @@ from __future__ import annotations
 import time
 
 from fastapi import FastAPI, Request, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest, REGISTRY
 
-REQUEST_COUNT = Counter(
+
+def _get_or_create_counter(name: str, documentation: str, labelnames: list):
+    """Get counter from registry or create if not exists."""
+    try:
+        return Counter(name, documentation, labelnames)
+    except ValueError:
+        # Already registered, retrieve from registry
+        for collector in REGISTRY._collector_to_names:
+            if getattr(collector, '_name', None) == name:
+                return collector
+        raise
+
+
+def _get_or_create_histogram(name: str, documentation: str, labelnames: list):
+    """Get histogram from registry or create if not exists."""
+    try:
+        return Histogram(name, documentation, labelnames)
+    except ValueError:
+        # Already registered, retrieve from registry
+        for collector in REGISTRY._collector_to_names:
+            if getattr(collector, '_name', None) == name:
+                return collector
+        raise
+
+
+REQUEST_COUNT = _get_or_create_counter(
     "http_requests_total",
     "Total number of HTTP requests",
     ["method", "path", "status"],
 )
 
-REQUEST_LATENCY = Histogram(
+REQUEST_LATENCY = _get_or_create_histogram(
     "http_request_duration_seconds",
     "HTTP request latency in seconds",
     ["method", "path"],

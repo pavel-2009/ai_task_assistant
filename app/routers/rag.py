@@ -2,6 +2,7 @@
 Роутер для запросов к RAG модели.
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from ..db import get_async_session
 from ..error_handlers import AppError
 from ..schemas import AskRequest
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/rag",
@@ -44,6 +46,7 @@ async def ask(
         )
         return result
     except Exception as exc:
+        logger.error(f"Ошибка при обработке RAG запроса: {exc}", exc_info=True)
         raise AppError("Ошибка при обработке RAG запроса", status_code=500) from exc
 
 

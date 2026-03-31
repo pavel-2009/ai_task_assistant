@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
     LLM_MODEL: str = "meta-llama/llama-3.3-8b-instruct:free"
-    LLM_API_KEY: str = ""
+    LLM_API_KEY: str = "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" # Пример
     LLM_TIMEOUT_SECONDS: float = 60.0
 
     @field_validator("SECRET_KEY")

@@ -54,3 +54,8 @@ python-dotenv==1.0.1
 py-cpuinfo==9.0.0
 # === Monitoring ===
 prometheus-client==0.22.1
+
+# === Testing ===
+pytest==8.3.2
+pytest-asyncio==0.24.0
+pytest-cov==5.0.0

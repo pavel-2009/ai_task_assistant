@@ -8,8 +8,6 @@ import logging
 import os
 import sys
 import time
-import subprocess
-import platform
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response, status
@@ -43,59 +41,6 @@ _background_tasks = {
     "reindex_tasks": None,
     "train_cf": None,
 }
-
-
-def _kill_port(port: int) -> None:
-    """Освобождает порт путем завершения процесса, который его занимает."""
-    try:
-        if platform.system() == "Windows":
-            # Windows: используем netstat и taskkill
-            result = subprocess.run(
-                f"netstat -ano | findstr :{port}",
-                shell=True,
-                capture_output=True,
-                text=True
-            )
-            if result.stdout:
-                # Извлекаем PID из последней колонки
-                lines = result.stdout.strip().split('\n')
-                for line in lines:
-                    parts = line.split()
-                    if parts:
-                        pid = parts[-1]
-                        try:
-                            subprocess.run(
-                                f"taskkill /PID {pid} /F",
-                                shell=True,
-                                capture_output=True
-                            )
-                            logger.info(f"Процесс {pid} на порту {port} завершен")
-                        except Exception as e:
-                            logger.warning(f"Ошибка при завершении процесса {pid}: {e}")
-        else:
-            # Linux/macOS: используем lsof и kill
-            result = subprocess.run(
-                f"lsof -ti:{port}",
-                shell=True,
-                capture_output=True,
-                text=True
-            )
-            if result.stdout:
-                pids = result.stdout.strip().split('\n')
-                for pid in pids:
-                    if pid:
-                        try:
-                            subprocess.run(
-                                f"kill -9 {pid}",
-                                shell=True,
-                                capture_output=True
-                            )
-                            logger.info(f"Процесс {pid} на порту {port} завершен")
-                        except Exception as e:
-                            logger.warning(f"Ошибка при завершении процесса {pid}: {e}")
-    except Exception as e:
-        logger.warning(f"Ошибка при попытке освободить порт {port}: {e}")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -144,11 +89,6 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         logger.info("Initiating graceful shutdown...")
-        
-        # Освобождаем порты
-        logger.info("Освобождение портов 8000 и 11434...")
-        _kill_port(8000)
-        _kill_port(11434)
         
         # Отменяем все активные фоновые задачи
         logger.info("Отмена фоновых задач...")

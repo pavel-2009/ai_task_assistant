@@ -17,7 +17,7 @@ class StubNerService:
 
 def _auth_headers(client) -> dict[str, str]:
     username = f"task_user_{uuid.uuid4().hex[:8]}"
-    password = "testpassword"
+    password = "TestPass123!"
 
     register_payload = {
         "username": username,

@@ -6,8 +6,8 @@ import bcrypt
 def hash_password(password: str) -> str:
     """Хэширование пароля с bcrypt"""
 
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode("utf-8"), salt, rounds=12).decode("utf-8")
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
 def verify_password(password: str, hashed_password: str) -> bool:

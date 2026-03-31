@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,7 @@ from ..ml.nlp.ner_service import NerService
 from ..ml.nlp.semantic_search_service import SemanticSearchService
 
 router = APIRouter(prefix="/nlp", tags=["NLP"])
+logger = logging.getLogger(__name__)
 
 MAX_BATCH_SIZE = 10
 MAX_TEXT_LENGTH = 1000
@@ -111,6 +113,7 @@ async def search(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
+        logger.error(f"Ошибка при семантическом поиске: {exc}", exc_info=True)
         raise AppError("Ошибка при семантическом поиске", status_code=500) from exc
 
     return {"results": results}
