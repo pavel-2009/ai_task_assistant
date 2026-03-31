@@ -252,12 +252,12 @@ async def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
         },
         "llm": {
             "ready": llm_service and await llm_service.is_available(),
-            "model": config.OLLAMA_MODEL,
-            "url": config.OLLAMA_BASE_URL,
+            "model": config.LLM_MODEL,
+            "url": config.LLM_BASE_URL,
         },
         "rag": {
             "ready": rag_service is not None,
-            "llm_model": config.OLLAMA_MODEL if rag_service is not None else None,
+            "llm_model": config.LLM_MODEL if rag_service is not None else None,
         },
         "data_drift": {
             "ready": drift_detector is not None,
