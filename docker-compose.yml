@@ -19,8 +19,11 @@ services:
     volumes:
       - ./avatars:/app/avatars
       - ./checkpoints:/app/checkpoints
-      - ./test.db:/app/test.db
+      - db_data:/app/db
       - torch_cache:/root/.cache/torch
+    depends_on:
+      redis:
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -39,19 +42,8 @@ services:
     volumes:
       - ./avatars:/app/avatars
       - ./checkpoints:/app/checkpoints
-      - ./test.db:/app/test.db
+      - db_data:/app/db
       - torch_cache:/root/.cache/torch
-    env_file:
-      - .env
-    environment:
-      - PYTHONUNBUFFERED=1
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    command: >
-      sh -c "
-        sleep 5 &&
-        celery -A app.celery_app worker -B --loglevel=info --concurrency=2 --max-tasks-per-child=10
-      "
     restart: always
     depends_on:
       - redis
