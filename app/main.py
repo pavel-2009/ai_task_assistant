@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response, status
 
 from app.core import config
+from app.core.metrics import setup_metrics
 from app.db import close_redis, engine
 from app.error_handlers import register_exception_handlers
 from app.celery_app import celery_app
@@ -188,6 +189,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+setup_metrics(app, enabled=config.METRICS_ENABLED, path=config.METRICS_PATH)
 register_exception_handlers(app)
 
 

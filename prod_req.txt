@@ -52,3 +52,5 @@ pydantic-settings==2.6.1
 python-dotenv==1.0.1
 
 py-cpuinfo==9.0.0
+# === Monitoring ===
+prometheus-client==0.22.1
