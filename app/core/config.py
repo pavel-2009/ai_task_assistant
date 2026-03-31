@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_PERIOD_SECONDS: int = 60
 
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3.2"
+    LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
+    LLM_MODEL: str = "meta-llama/llama-3.3-8b-instruct:free"
+    LLM_API_KEY: str = ""
+    LLM_TIMEOUT_SECONDS: float = 60.0
 
     @field_validator("SECRET_KEY")
     @classmethod

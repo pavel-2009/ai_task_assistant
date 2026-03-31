@@ -1,111 +1,134 @@
-﻿"""
-Сервис для управления локальной/облачной LLM моделью.
+"""
+Сервис для управления облачной LLM моделью (OpenAI-compatible API).
 """
 
+import json
 import logging
+from collections.abc import AsyncGenerator
+
+import httpx
 
 from app.core import config
-
-try:
-    import ollama
-except ImportError:  # pragma: no cover - зависит от окружения
-    ollama = None
-
 
 logger = logging.getLogger(__name__)
 
 
 class LLMService:
-    """Сервис для управления локальной/облачной LLM моделью."""
+    """Сервис для управления облачной LLM моделью."""
 
     def __init__(self, base_url: str | None = None, model: str | None = None):
-        self.url = base_url or config.OLLAMA_BASE_URL
-        self.client = ollama.AsyncClient(self.url) if ollama is not None else None
-        self.model = model or config.OLLAMA_MODEL
+        self.url = (base_url or config.LLM_BASE_URL).rstrip("/")
+        self.model = model or config.LLM_MODEL
+        self.api_key = config.LLM_API_KEY
+        self.timeout_seconds = config.LLM_TIMEOUT_SECONDS
+
+    def _headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    def _build_messages(self, prompt: str, system: str | None = None) -> list[dict[str, str]]:
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        return messages
 
     async def generate(self, prompt: str, system: str | None = None) -> str:
-        """Запрос к LLM модели и получение полного ответа"""
+        """Запрос к LLM модели и получение полного ответа."""
 
-        if self.client is None:
-            logger.error("Ollama client is unavailable: package 'ollama' is not installed")
+        if not self.api_key:
+            logger.error("LLM API key is not configured")
             return "Извините, LLM сервис сейчас недоступен."
 
-        messages = []
-
-        if system:
-            messages.append({"role": "system", "content": system})
-
-        messages.append({"role": "user", "content": prompt})
+        payload = {
+            "model": self.model,
+            "messages": self._build_messages(prompt=prompt, system=system),
+        }
 
         try:
-            response = await self.client.chat(
-                model=self.model,
-                messages=messages,
-            )
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(
+                    f"{self.url}/chat/completions",
+                    headers=self._headers(),
+                    json=payload,
+                )
+                response.raise_for_status()
 
-            return response["message"]["content"]
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
         except Exception as exc:
-            logger.error(f"Ошибка при генерации ответа: {exc}")
+            logger.error("Ошибка при генерации ответа: %s", exc, exc_info=True)
             return "Извините, произошла ошибка при обработке вашего запроса."
 
-    async def generate_stream(self, prompt: str, system: str | None = None):
-        """
-        Потоковая генерация (async generator)
-        Возвращает токены по мере генерации
-        """
+    async def generate_stream(self, prompt: str, system: str | None = None) -> AsyncGenerator[str, None]:
+        """Потоковая генерация (async generator): возвращает токены по мере генерации."""
 
-        if self.client is None:
-            logger.error("Ollama client is unavailable: package 'ollama' is not installed")
+        if not self.api_key:
+            logger.error("LLM API key is not configured")
             return
 
-        messages = []
+        payload = {
+            "model": self.model,
+            "messages": self._build_messages(prompt=prompt, system=system),
+            "stream": True,
+        }
 
-        if system:
-            messages.append({"role": "system", "content": system})
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.url}/chat/completions",
+                    headers=self._headers(),
+                    json=payload,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line or not line.startswith("data: "):
+                            continue
 
-        messages.append({"role": "user", "content": prompt})
+                        chunk = line[6:].strip()
+                        if chunk == "[DONE]":
+                            break
 
-        stream = await self.client.chat(
-            model=self.model,
-            messages=messages,
-            stream=True,
-        )
+                        try:
+                            data = json.loads(chunk)
+                        except json.JSONDecodeError:
+                            continue
 
-        async for chunk in stream:
-            if "message" in chunk and "content" in chunk["message"]:
-                yield chunk["message"]["content"]
+                        delta = data.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content")
+                        if content:
+                            yield content
+        except Exception as exc:
+            logger.error("Ошибка при потоковой генерации: %s", exc, exc_info=True)
 
     async def is_available(self) -> bool:
-        """
-        Проверяет доступность Ollama и наличие модели
-        """
-        if self.client is None:
+        """Проверяет доступность удаленного LLM API."""
+
+        if not self.api_key:
             return False
 
         try:
-            response = await self.client.list()
-            models = [model["name"] for model in response.get("models", [])]
-            return self.model in models
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.get(f"{self.url}/models", headers=self._headers())
+                response.raise_for_status()
+
+            return True
         except Exception:
             return False
 
     async def warmup(self) -> None:
-        """
-        Гарантирует, что модель доступна в Ollama при старте.
-        Если модели нет локально — пробует загрузить ее.
-        """
-        if self.client is None:
-            logger.warning("Skip LLM warmup: package 'ollama' is not installed")
+        """Проверяет доступность удаленной модели при старте."""
+
+        if not self.api_key:
+            logger.warning("Skip LLM warmup: LLM_API_KEY is not set")
             return
 
-        try:
-            if await self.is_available():
-                logger.info("Ollama model '%s' is already available", self.model)
-                return
+        if await self.is_available():
+            logger.info("Cloud LLM API is available (model='%s')", self.model)
+            return
 
-            logger.info("Ollama model '%s' not found locally. Pulling...", self.model)
-            await self.client.pull(self.model)
-            logger.info("Ollama model '%s' is ready", self.model)
-        except Exception as exc:
-            logger.error("LLM warmup failed for model '%s': %s", self.model, exc, exc_info=True)
-            raise
+        logger.error("LLM warmup failed: API is unavailable (model='%s')", self.model)
+        raise RuntimeError("LLM API is unavailable")
