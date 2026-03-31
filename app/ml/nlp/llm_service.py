@@ -4,11 +4,13 @@
 
 import json
 import logging
+import time
 from collections.abc import AsyncGenerator
 
 import httpx
 
 from app.core import config
+from app.ml.metrics import MLMetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +19,13 @@ class LLMService:
     """Сервис для управления облачной LLM моделью."""
 
     def __init__(self, base_url: str | None = None, model: str | None = None):
+        self.metrics = MLMetricsCollector(self.__class__.__name__)
+        load_start = time.perf_counter()
         self.url = (base_url or config.LLM_BASE_URL).rstrip("/")
         self.model = model or config.LLM_MODEL
         self.api_key = config.LLM_API_KEY
         self.timeout_seconds = config.LLM_TIMEOUT_SECONDS
+        self.metrics.record_load_time(time.perf_counter() - load_start)
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -37,28 +42,31 @@ class LLMService:
 
     async def generate(self, prompt: str, system: str | None = None) -> str:
         """Запрос к LLM модели и получение полного ответа."""
-
-        if not self.api_key:
-            logger.error("LLM API key is not configured")
-            return "Извините, LLM сервис сейчас недоступен."
-
-        payload = {
-            "model": self.model,
-            "messages": self._build_messages(prompt=prompt, system=system),
-        }
-
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(
-                    f"{self.url}/chat/completions",
-                    headers=self._headers(),
-                    json=payload,
-                )
-                response.raise_for_status()
+            with self.metrics.time_inference():
+                if not self.api_key:
+                    logger.error("LLM API key is not configured")
+                    self.metrics.record_error("MissingApiKey")
+                    return "Извините, LLM сервис сейчас недоступен."
 
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+                payload = {
+                    "model": self.model,
+                    "messages": self._build_messages(prompt=prompt, system=system),
+                }
+
+                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                    response = await client.post(
+                        f"{self.url}/chat/completions",
+                        headers=self._headers(),
+                        json=payload,
+                    )
+                    response.raise_for_status()
+
+                data = response.json()
+                self.metrics.record_success()
+                return data["choices"][0]["message"]["content"]
         except Exception as exc:
+            self.metrics.record_error(type(exc).__name__)
             logger.error("Ошибка при генерации ответа: %s", exc, exc_info=True)
             return "Извините, произошла ошибка при обработке вашего запроса."
 
