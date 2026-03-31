@@ -26,8 +26,10 @@ services:
     volumes:
       - ./avatars:/app/avatars
       - ./checkpoints:/app/checkpoints
-      - ./test.db:/app/test.db
+      - db_data:/app/db
       - torch_cache:/root/.cache/torch
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////app/db/test.db
     depends_on:
       redis:
         condition: service_healthy
@@ -48,6 +50,8 @@ services:
     volumes:
       - ./avatars:/app/avatars
       - ./checkpoints:/app/checkpoints
-      - ./test.db:/app/test.db
+      - db_data:/app/db
       - torch_cache:/root/.cache/torch
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////app/db/test.db
     restart: always

@@ -40,6 +40,26 @@ logger = logging.getLogger(__name__)
 _services: dict = {}
 _initialized = False
 _init_lock = asyncio.Lock()
+_file_logging_configured = False
+
+
+def _setup_services_file_logging() -> None:
+    global _file_logging_configured
+    if _file_logging_configured:
+        return
+
+    log_path = Path(os.getenv("SERVICES_LOG_PATH", "/app/logs/services.log"))
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    )
+    logger.addHandler(file_handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = True
+    _file_logging_configured = True
 
 
 def default_inference_checkpoint_path() -> str:
@@ -58,6 +78,7 @@ async def init_services(
 ) -> None:
     """Инициализирует все сервисы один раз при старте приложения."""
     global _initialized
+    _setup_services_file_logging()
 
     if _initialized:
         return
@@ -77,41 +98,56 @@ async def init_services(
     _services["redis"] = redis_client
     
     # CV сервисы
+    logger.info("Loading service 'inference' (model checkpoint: %s)", inference_checkpoint_path)
     _services["inference"] = InferenceService(
         checkpoints_path=inference_checkpoint_path,
         idx_to_class=inference_idx_to_class or {}
     )
     
+    logger.info("Loading service 'image_embedding' (class: %s)", ImageEmbeddingService.__name__)
     _services["image_embedding"] = ImageEmbeddingService()
     
     if use_onnx:
+        logger.info("Loading service 'yolo' (backend: ONNX, class: %s)", YoloONNXService.__name__)
         _services["yolo"] = YoloONNXService()
     else:
+        logger.info("Loading service 'yolo' (backend: PyTorch, class: %s)", YoloService.__name__)
         _services["yolo"] = YoloService()
     
+    logger.info("Loading service 'segmentation' (class: %s)", SegmentationService.__name__)
     _services["segmentation"] = SegmentationService()
     
     # NLP сервисы
+    logger.info("Loading service 'embedding' (class: %s)", EmbeddingService.__name__)
     _services["embedding"] = EmbeddingService()
+    logger.info("Loading service 'ner' (class: %s)", NerService.__name__)
     _services["ner"] = NerService()
+    logger.info("Loading service 'llm' (class: %s)", LLMService.__name__)
     _services["llm"] = LLMService()
     # Примечание: warmup теперь вызывается отдельно как background task, чтобы не блокировать запуск
     
     # Vector DB и семантический поиск
+    logger.info("Loading service 'vector_db' (dim: %s)", _services["embedding"].dimension)
     _services["vector_db"] = VectorDB(
         dim=_services["embedding"].dimension,
         redis_client=redis_client
     )
     
     # Рекомендательная система
-    _services["recsys_vector_db"] = RecSysVectorDB(dim=896, redis_client=redis_client)  
+    logger.info("Loading service 'recsys_vector_db' (dim: 896)")
+    _services["recsys_vector_db"] = RecSysVectorDB(dim=896, redis_client=redis_client)
     
+    logger.info("Loading service 'content_based_recommender' (class: %s)", ContentBasedRecommender.__name__)
     _services["content_based_recommender"] = ContentBasedRecommender(
         image_embedding_service=_services["image_embedding"],
         text_embedding_service=_services["embedding"],
         image_vector_db=_services["recsys_vector_db"]
     )
     
+    logger.info(
+        "Loading service 'collaborative_filtering_recommender' (class: %s)",
+        CollaborativeFilteringRecommender.__name__,
+    )
     _services["collaborative_filtering_recommender"] = CollaborativeFilteringRecommender(
         redis_client=redis_client
     )
@@ -120,6 +156,7 @@ async def init_services(
     if redis_client:
         await _services["vector_db"].load_from_redis()
     
+    logger.info("Loading service 'semantic_search' (class: %s)", SemanticSearchService.__name__)
     _services["semantic_search"] = SemanticSearchService(
         embedding_service=_services["embedding"],
         vector_db=_services["vector_db"],
@@ -127,6 +164,7 @@ async def init_services(
     )
     
     # RAG сервис
+    logger.info("Loading service 'rag' (class: %s)", RAGService.__name__)
     _services["rag"] = RAGService(
         llm_service=_services["llm"],
         semantic_search_service=_services["semantic_search"],
@@ -134,6 +172,7 @@ async def init_services(
     )
     
     # Детектор дрейфа
+    logger.info("Loading service 'drift_detector' (class: %s)", DriftDetector.__name__)
     _services["drift_detector"] = DriftDetector()
     
     # Загружаем референсные эмбеддинги всех существующих аватаров
@@ -151,6 +190,7 @@ async def init_services(
                 _services["drift_detector"].add_embedding(emb)
 
     _initialized = True
+    logger.info("Services initialized successfully. Loaded services: %s", sorted(_services.keys()))
 
 
 async def ensure_services_initialized(
