@@ -7,6 +7,7 @@ import faiss
 import redis
 
 import pickle
+import asyncio
 
 from app.core import config
 
@@ -22,6 +23,7 @@ class RecSysVectorDB:
         self.index_key = "recsys_vector_db:faiss_index"
         self.ids_key = "recsys_vector_db:ids"
         self.delete_cache_prefix = "recsys_vector_db:delete_cache:"
+        self._lock = asyncio.Lock()
         
     
     async def add_vector(self, vector: np.ndarray, task_id: str) -> None:
@@ -34,21 +36,21 @@ class RecSysVectorDB:
         self.ids.append(task_id)
         self.ids_to_idx[task_id] = idx
         
-        # Сохраняем индекс и IDs в Redis
+        # Сохраняем индекс и IDs в Redis (используем pickle для консистентности с load_from_redis)
         if self.redis_client:
-            self.redis_client.set(self.index_key, faiss.serialize_index(self.index))
-            self.redis_client.set(self.ids_key, ",".join(self.ids))
+            await self.redis_client.set(self.index_key, faiss.serialize_index(self.index))
+            await self.redis_client.set(self.ids_key, pickle.dumps(self.ids))
         
         
     async def search(self, vector: np.ndarray, top_k: int = config.DEFAULT_TOP_K) -> list[tuple[str, float]]:
         """Ищем похожие векторы изображений и возвращаем их IDs."""
         if self.redis_client:
-            # Загружаем индекс и IDs из Redis
+            # Загружаем индекс и IDs из Redis (используем pickle для консистентности)
             index_data = await self.redis_client.get(self.index_key)
             ids_data = await self.redis_client.get(self.ids_key)
             if index_data and ids_data:
                 self.index = faiss.deserialize_index(index_data)
-                self.ids = ids_data.decode().split(",")
+                self.ids = pickle.loads(ids_data)
                 self.ids_to_idx = {task_id: idx for idx, task_id in enumerate(self.ids)}
         
         if len(self.ids) == 0:
@@ -71,7 +73,7 @@ class RecSysVectorDB:
 
         try:
             async with self._lock:
-                index_data = faiss.serialize_index(self.index).tobytes()
+                index_data = faiss.serialize_index(self.index)
                 ids_data = pickle.dumps(self.ids)
             
             async with self.redis_client.pipeline(transaction=True) as pipeline:
@@ -93,7 +95,7 @@ class RecSysVectorDB:
 
             async with self._lock:
                 if index_bytes:
-                    self.index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
+                    self.index = faiss.deserialize_index(index_bytes)
                 if ids_bytes:
                     self.ids = pickle.loads(ids_bytes)
 

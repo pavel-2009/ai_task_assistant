@@ -28,6 +28,7 @@ from app.services import (
     get_drift_detector,
     get_redis,
 )
+from app.schemas.common import PingResponse
 
 from .ml.nlp.tasks import reindex_tasks
 from .ml.recsys.tasks import train_collaborative_filtering_model
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing all services...")
         await ensure_services_initialized(
             use_onnx=config.USE_ONNX,
+            idx_to_class=config.INFERENCE_IDX_TO_CLASS,
         )
         logger.info("All services initialized successfully")
 
@@ -209,7 +211,7 @@ async def _get_model_health(app: FastAPI) -> dict[str, dict[str, object]]:
     }
 
 
-@app.get("/ping", status_code=status.HTTP_200_OK, description="Health-check endpoint")
+@app.get("/ping", status_code=status.HTTP_200_OK, description="Health-check endpoint", response_model=PingResponse)
 async def ping(request: Request, response: Response):
     """Информация о состоянии приложения и подключенных моделей"""
     models = await _get_model_health(request.app)

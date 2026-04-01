@@ -50,7 +50,7 @@ async def _process_task_tags_and_embedding_async(task_id: int, title: str, descr
             update(Task).where(Task.id == task_id).values(tags=json.dumps(tags_result))
         )
         
-        await semantic_search_service.index_async(
+        await semantic_search_service.index(
             text=text,
             session=session,
             item_id=task_id,
@@ -58,7 +58,7 @@ async def _process_task_tags_and_embedding_async(task_id: int, title: str, descr
 
         await session.execute(
             insert(Text).values(
-                item_id=task_id,
+                text_id=task_id,
                 text=text
             )
         )

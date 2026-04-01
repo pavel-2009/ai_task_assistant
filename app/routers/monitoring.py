@@ -2,7 +2,8 @@
 Роутер для мониторинга моделей машинного обучения.
 """
 
-from fastapi import APIRouter, Request, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
+from app.schemas import DriftReportResponse, DriftHistoryResponse
 
 
 router = APIRouter(
@@ -11,8 +12,8 @@ router = APIRouter(
 )
 
 
-@router.get("/drift/report")
-async def get_drift_report(request: Request):
+@router.get("/drift/report", response_model=DriftReportResponse)
+async def get_drift_report(request):
     """
     Возвращает текущий статус из DriftDetector.get_status()
     """
@@ -24,18 +25,22 @@ async def get_drift_report(request: Request):
             detail="Ошибка при загрузке drift detector"
         )
     
-    return drift_detector.get_status()
+    result = drift_detector.get_status()
+    return DriftReportResponse(
+        status=result.get("status", "unknown"),
+        detail=result.get("detail")
+    )
 
 
-@router.get("/drift/history")
-async def get_drift_history(request: Request):
+@router.get("/drift/history", response_model=DriftHistoryResponse)
+async def get_drift_history(request):
     """
     Возвращает историю дрейфов из Redis (ключи drift_alert:*)
     """
     redis_client = getattr(request.app.state, "redis_client", None)
     
     if not redis_client:
-        return {"history": {}, "count": 0, "status": "redis_unavailable"}
+        return DriftHistoryResponse(history={}, count=0, status="redis_unavailable")
     
     try:
         # Получить все ключи drift_alert:*
@@ -51,7 +56,9 @@ async def get_drift_history(request: Request):
             except Exception:
                 continue
         
-        return {"history": history, "count": len(history), "status": "ok"}
+        return DriftHistoryResponse(history=history, count=len(history), status="ok")
     except Exception as e:
         # Redis недоступен, возвращаем пустую историю
-        return {"history": {}, "count": 0, "status": "redis_unavailable", "error": str(e)}
+        return DriftHistoryResponse(
+            history={}, count=0, status="redis_unavailable", error=str(e)
+        )

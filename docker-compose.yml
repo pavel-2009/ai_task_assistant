@@ -17,6 +17,18 @@ services:
       timeout: 3s
       retries: 5
 
+  postgres:
+    image: postgres:latest
+    container_name: ai_task_assistant_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
   # 2. API
   api:
     build: .
@@ -29,7 +41,7 @@ services:
       - ./test.db:/app/test.db
       - torch_cache:/root/.cache/torch
     environment:
-      DATABASE_URL: sqlite+aiosqlite:///./test.db
+      DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/postgres
     depends_on:
       redis:
         condition: service_healthy
@@ -51,9 +63,10 @@ services:
       - ./avatars:/app/avatars
       - ./checkpoints:/app/checkpoints
       - ./test.db:/app/test.db
-      - torch_cache:/root/.cache/torch
+      - torch_cache:/root/.cache/torch\
+      - db_data:/var/lib/postgresql/data
     environment:
-      DATABASE_URL: sqlite+aiosqlite:///./test.db
+      DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/postgres
     restart: always
 
   # 4. Prometheus

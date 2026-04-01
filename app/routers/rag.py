@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_async_session
 from ..error_handlers import AppError
-from ..schemas import AskRequest
+from ..schemas import AskRequest, AskResponse
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ router = APIRouter(
 
 
 
-@router.post("/ask")
+@router.post("/ask", response_model=AskResponse)
 async def ask(
     request: Request,
     body: AskRequest,
@@ -44,13 +44,19 @@ async def ask(
             body.top_k,
             body.use_cache
         )
+        # Ensure response conforms to AskResponse schema
+        if isinstance(result, dict):
+            return AskResponse(
+                answer=result.get("answer", ""),
+                sources=result.get("sources")
+            )
         return result
     except Exception as exc:
         logger.error(f"Ошибка при обработке RAG запроса: {exc}", exc_info=True)
         raise AppError("Ошибка при обработке RAG запроса", status_code=500) from exc
 
 
-@router.post("/ask/stream")
+@router.post("/ask/stream", description="Потоковый SSE-запрос к RAG модели, returns text/event-stream")
 async def ask_stream(
     request: Request,
     body: AskRequest,
@@ -58,6 +64,7 @@ async def ask_stream(
 ):
     """
     Потоковый SSE-запрос к RAG модели.
+    Возвращает поток данных в формате Server-Sent Events (text/event-stream).
     """
     rag_service = getattr(request.app.state, "rag_service", None)
 

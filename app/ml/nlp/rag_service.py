@@ -13,6 +13,11 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
     from .llm_service import LLMService
     from .semantic_search_service import SemanticSearchService
+    
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class RAGService:
@@ -106,24 +111,23 @@ ID: {task.get('task_id')}"""
         sources = self._build_sources(tasks)
         confidence = self._calculate_confidence(tasks)
         
-        system_prompt = """Ты — ассистент по управлению задачами в системе AI Task Assistant.
-Отвечай ТОЛЬКО на основе информации из предоставленных задач.
-Если ответа нет в задачах — скажи "У меня нет информации об этом в ваших задачах".
-НЕ используй свои общие знания.
-В конце ответа укажи ID задач, на которые опирался."""
+        system_prompt = config.SYSTEM_PROMPT
 
-        user_prompt = f"""Вот похожие задачи из системы:
+        user_prompt = config.USER_PROMPT.format(formatted_tasks, query)
+        
+        try:
 
-{formatted_tasks}
-
-Вопрос пользователя: {query}
-
-Ответ:"""
-
-        answer = await self.llm_service.generate(
-            prompt=user_prompt,
-            system=system_prompt
-        )
+            answer = await self.llm_service.generate(
+                prompt=user_prompt,
+                system=system_prompt
+            )
+            
+        except Exception as exc:
+            logger.error(f"Ошибка при генерации ответа в RAG: {exc}", exc_info=True)
+            answer = (
+                "Произошла ошибка при генерации ответа. "
+                "Попробуйте переформулировать вопрос или создать задачу по этой теме."
+            )
         
         response = {
             "answer": answer,
@@ -164,22 +168,23 @@ ID: {task.get('task_id')}"""
 
         formatted_tasks = self._format_tasks(tasks)
 
-        system_prompt = """Ты — ассистент по управлению задачами в системе AI Task Assistant.
-Отвечай ТОЛЬКО на основе информации из предоставленных задач.
-Если ответа нет в задачах — скажи "У меня нет информации об этом в ваших задачах".
-НЕ используй свои общие знания.
-В конце ответа укажи ID задач, на которые опирался."""
+        system_prompt = config.SYSTEM_PROMPT
 
-        user_prompt = f"""Вот похожие задачи из системы:
+        user_prompt = config.USER_PROMPT.format(formatted_tasks, query)
+        
+        try:
 
-{formatted_tasks}
-
-Вопрос пользователя: {query}
-
-Ответ:"""
-
-        async for token in self.llm_service.generate_stream(
-            prompt=user_prompt,
-            system=system_prompt,
-        ):
-            yield token
+            async for token in self.llm_service.generate_stream(
+                prompt=user_prompt,
+                system=system_prompt,
+            ):
+                yield token
+                
+        except Exception as exc:
+            logger.error(f"Ошибка при генерации ответа в RAG: {exc}", exc_info=True)
+            fallback = (
+                "Произошла ошибка при генерации ответа. "
+                "Попробуйте переформулировать вопрос или создать задачу по этой теме."
+            )
+            for chunk in fallback.split():
+                yield f"{chunk} "

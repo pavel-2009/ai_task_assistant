@@ -2,14 +2,14 @@
 Роутер для аутентификации и авторизации пользователей.
 """
 
-from fastapi import APIRouter, status, Depends, HTTPException, Request
+from fastapi import APIRouter, status, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.db_models import User
-from app.schemas import UserCreate, UserGet
+from app.schemas import UserCreate, UserGet, TokenResponse
 from app.db import get_async_session
 from app.auth import create_access_token
 from app.core.rate_limit import limiter
@@ -23,9 +23,8 @@ router = APIRouter(
 
 
 @limiter.limit("5/minute")  # Ограничение на 5 запросов в минуту для всех эндпоинтов в этом роутере
-@router.post("/register", status_code=status.HTTP_201_CREATED, description="Регистрация нового пользователя")
+@router.post("/register", status_code=status.HTTP_201_CREATED, description="Регистрация нового пользователя", response_model=UserGet)
 async def register_new_user(
-    request: Request,
     user_payload: UserCreate,
     session: AsyncSession = Depends(get_async_session)
 ):
@@ -64,9 +63,8 @@ async def register_new_user(
 
 
 @limiter.limit("10/minute")  # Ограничение на 10 запросов в минуту для эндпоинта логина
-@router.post("/login", status_code=status.HTTP_200_OK, description="Аутентификация пользователя")
+@router.post("/login", status_code=status.HTTP_200_OK, description="Аутентификация пользователя", response_model=TokenResponse)
 async def login_user(
-    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_async_session)
 ):
@@ -89,4 +87,4 @@ async def login_user(
 
     token = create_access_token(user_id=user.id)
 
-    return {"access_token": token, "token_type": "bearer"}
+    return TokenResponse(access_token=token, token_type="bearer")

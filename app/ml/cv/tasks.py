@@ -107,7 +107,7 @@ def check_avatar_drift(image_path: str):
     
     detector = get_drift_detector()
     
-    detector.add_embedding([embedding])
+    detector.add_embedding(embedding)
     
     drift_result = detector.calculate_drift([embedding])
     

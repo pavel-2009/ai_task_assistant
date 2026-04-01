@@ -38,7 +38,8 @@ class DriftDetector:
             return {"drift_detected": False, "drift_score": 0.0, "error": "no reference"}
         
         # Создаем обучающую выборку для классификатора, объединяя референсные данные и текущие данные
-        X = np.vstack([self.reference_embeddings, current_embedding])
+        # Правильно конкатенируем два списка эмбеддингов перед vstack
+        X = np.vstack(self.reference_embeddings + current_embedding)
         
         # Создаем метки классов для обучения классификатора (0 - референс, 1 - текущие данные)
         y = np.array([0] * len(self.reference_embeddings) + [1] * len(current_embedding))

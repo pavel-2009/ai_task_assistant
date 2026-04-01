@@ -169,7 +169,7 @@ class VectorDB:
 
         try:
             async with self._lock:
-                index_data = faiss.serialize_index(self.index).tobytes()
+                index_data = faiss.serialize_index(self.index)
                 ids_data = pickle.dumps(self.ids)
             
             async with self.redis_client.pipeline(transaction=True) as pipeline:
@@ -191,7 +191,7 @@ class VectorDB:
 
             async with self._lock:
                 if index_bytes:
-                    self.index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
+                    self.index = faiss.deserialize_index(index_bytes)
                 if ids_bytes:
                     self.ids = pickle.loads(ids_bytes)
 

@@ -16,6 +16,9 @@ from ..error_handlers import AppError
 from ..ml.nlp.embedding_service import EmbeddingService
 from ..ml.nlp.ner_service import NerService
 from ..ml.nlp.semantic_search_service import SemanticSearchService
+from ..schemas import (
+    EmbeddingResponse, SearchResults, IndexResponse, NLPTagTaskResponse
+)
 
 router = APIRouter(prefix="/nlp", tags=["NLP"])
 logger = logging.getLogger(__name__)
@@ -71,7 +74,7 @@ def _get_ner_service(request: Request) -> NerService:
     return getattr(request.app.state, "ner_service", None)
 
 
-@router.post("/embedding", description="Получить эмбеддинг для текста")
+@router.post("/embedding", description="Получить эмбеддинг для текста", response_model=EmbeddingResponse)
 async def get_embedding(request: Request, text: str | list[str] = Body(...)):
     """Получить эмбеддинг для текста."""
     normalized_payload = _normalize_texts(text)
@@ -87,13 +90,14 @@ async def get_embedding(request: Request, text: str | list[str] = Body(...)):
     except Exception as exc:
         raise AppError("Ошибка при построении эмбеддинга", status_code=500) from exc
 
-    return {"embedding": embedding.tolist()}
+    return EmbeddingResponse(embedding=embedding.tolist())
 
 
 @router.post(
     "/search",
     description="Искать документы, наиболее похожие на запрос",
     status_code=status.HTTP_200_OK,
+    response_model=SearchResults
 )
 async def search(
     request: Request,
@@ -116,13 +120,14 @@ async def search(
         logger.error(f"Ошибка при семантическом поиске: {exc}", exc_info=True)
         raise AppError("Ошибка при семантическом поиске", status_code=500) from exc
 
-    return {"results": results}
+    return SearchResults(results=results, total=len(results))
 
 
 @router.post(
     "/index",
     description="Индексировать текст, добавляя его эмбеддинг в базу данных",
     status_code=status.HTTP_200_OK,
+    response_model=IndexResponse
 )
 async def index(
     request: Request,
@@ -140,10 +145,10 @@ async def index(
     except Exception as exc:
         raise AppError("Ошибка индексации текста", status_code=500) from exc
 
-    return {"detail": "Текст успешно индексирован"}
+    return IndexResponse(detail="Текст успешно индексирован")
 
 
-@router.post("/tag-task", description="Получить теги для текста задачи")
+@router.post("/tag-task", description="Получить теги для текста задачи", response_model=NLPTagTaskResponse)
 async def tag_task(request: Request, text: str = Body(...)):
     """Получить теги для текста задачи."""
     ner_service = _get_ner_service(request)
@@ -161,4 +166,4 @@ async def tag_task(request: Request, text: str = Body(...)):
     except Exception as exc:
         raise AppError("Ошибка при обработке текста NER сервисом", status_code=500) from exc
 
-    return {"tags": result}
+    return NLPTagTaskResponse(tags=result)

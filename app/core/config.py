@@ -1,12 +1,14 @@
 ﻿from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+import torchvision
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     SECRET_KEY: str
-    DATABASE_URL: str = 'sqlite+aiosqlite:///./test.db'
+    DATABASE_URL: str
     REDIS_URL: str
     CELERY_BROKER_URL: str
     CELERY_RESULT_BACKEND: str
@@ -27,8 +29,24 @@ class Settings(BaseSettings):
 
     LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
     LLM_MODEL: str = "meta-llama/llama-3.3-8b-instruct:free"
-    LLM_API_KEY: str = "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" # Пример
+    LLM_API_KEY: str
     LLM_TIMEOUT_SECONDS: float = 60.0
+    
+    INFERENCE_IDX_TO_CLASS: dict[int, str] = {i: c for i, c in enumerate(torchvision.models.ResNet50_Weights.DEFAULT.meta["categories"])}
+    
+    USER_PROMPT: str = """Вот похожие задачи из системы:
+
+%s
+
+Вопрос пользователя: %s
+
+Ответ:"""
+    SYSTEM_PROMPT: str = """Ты — ассистент по управлению задачами в системе AI Task Assistant.
+Отвечай ТОЛЬКО на основе информации из предоставленных задач.
+Если ответа нет в задачах — скажи "У меня нет информации об этом в ваших задачах".
+НЕ используй свои общие знания.
+В конце ответа укажи ID задач, на которые опирался."""
+    
 
     @field_validator("SECRET_KEY")
     @classmethod

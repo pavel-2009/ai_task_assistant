@@ -18,6 +18,9 @@ from app.auth import get_current_user
 from app.utils.image_ops import validate_image, resize_image
 from app.ml.cv.tasks import detect_and_visualize_task, segment_image_task, predict_avatar_class
 from app.ml.nlp.tasks import update_recommendations_for_task
+from app.schemas import (
+    FileUploadResponse, CeleryTaskResponse, CeleryTaskStatusResponse
+)
 
 
 router = APIRouter(
@@ -26,7 +29,7 @@ router = APIRouter(
 )
 
 
-@router.post("/{task_id}/avatar", status_code=status.HTTP_200_OK, description="Загрузка аватара для задачи")
+@router.post("/{task_id}/avatar", status_code=status.HTTP_200_OK, description="Загрузка аватара для задачи", response_model=FileUploadResponse)
 async def upload_avatar(
     task_id: int = Path(...),
     image: UploadFile = None,
@@ -84,10 +87,10 @@ async def upload_avatar(
     # После загрузки аватара обновляем рекомендации для задачи
     update_recommendations_for_task.delay(task_id=task_id)
 
-    return {"filepath": f"avatars/{filename}", "filename": filename}
+    return FileUploadResponse(filepath=f"avatars/{filename}", filename=filename)
 
 
-@router.post("/{task_id}/predict/submit", status_code=status.HTTP_202_ACCEPTED, description="Создание задачи на предсказание класса аватарки задачи")
+@router.post("/{task_id}/predict/submit", status_code=status.HTTP_202_ACCEPTED, description="Создание задачи на предсказание класса аватарки задачи", response_model=CeleryTaskResponse)
 async def predict_img_class_submit(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
@@ -128,7 +131,7 @@ async def predict_img_class_submit(
 
     try:
         celery_task = predict_avatar_class.delay(task_id=task_id, image_path=image_path)
-        return {"message": "Задача на предсказание класса аватарки успешно создана", "celery_task_id": celery_task.id}
+        return CeleryTaskResponse(message="Задача на предсказание класса аватарки успешно создана", celery_task_id=celery_task.id)
     except ValueError as e:
         raise HTTPException(
             status_code=400,
@@ -136,7 +139,7 @@ async def predict_img_class_submit(
         )
         
         
-@router.get("/{task_id}/predict/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов предсказания класса аватарки задачи")
+@router.get("/{task_id}/predict/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов предсказания класса аватарки задачи", response_model=CeleryTaskStatusResponse)
 async def get_predict_class_results(
     task_id: int = Path(...),
     celery_task_id: str = Path(...),
@@ -181,20 +184,22 @@ async def get_predict_class_results(
         )
         
     if celery_task.state == "PENDING":
-        return {"status": "PENDING", "message": "Задача еще не началась"}
+        return CeleryTaskStatusResponse(status="PENDING", message="Задача еще не началась")
     
     elif celery_task.state == "STARTED":
-        return {"status": "STARTED", "message": "Задача выполняется"}
+        return CeleryTaskStatusResponse(status="STARTED", message="Задача выполняется")
     
     elif celery_task.state == "SUCCESS":
         result = celery_task.result
-        return {"status": "SUCCESS", "predicted_class": result.get("predicted_class")}
+        return CeleryTaskStatusResponse(status="SUCCESS", result=result.get("predicted_class") if result else None)
     
     elif celery_task.state == "FAILURE":
-        return {"status": "FAILURE", "message": "Задача завершилась с ошибкой"}
+        return CeleryTaskStatusResponse(status="FAILURE", message="Задача завершилась с ошибкой")
+    
+    return CeleryTaskStatusResponse(status=celery_task.state, message="Неизвестное состояние")
         
         
-@router.post("/{task_id}/detect/submit", status_code=status.HTTP_202_ACCEPTED, description="Детекция объектов на аватарке задачи")
+@router.post("/{task_id}/detect/submit", status_code=status.HTTP_202_ACCEPTED, description="Детекция объектов на аватарке задачи", response_model=CeleryTaskResponse)
 async def detect_objects(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
@@ -232,10 +237,10 @@ async def detect_objects(
         
     celery_task = detect_and_visualize_task.delay(task_id=task_id, image_path=image_path)
     
-    return {"message": "Задача на детекцию объектов успешно создана", "celery_task_id": celery_task.id}
+    return CeleryTaskResponse(message="Задача на детекцию объектов успешно создана", celery_task_id=celery_task.id)
 
 
-@router.post("/{task_id}/detect/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов детекции объектов на аватарке задачи")
+@router.get("/{task_id}/detect/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов детекции объектов на аватарке задачи", response_model=CeleryTaskStatusResponse)
 async def get_detection_results(
     task_id: int = Path(...),
     celery_task_id: str = Path(...),
@@ -280,23 +285,22 @@ async def get_detection_results(
         )
         
     if celery_task.state == "PENDING":
-        return {"status": "PENDING", "message": "Задача еще не началась"}
+        return CeleryTaskStatusResponse(status="PENDING", message="Задача еще не началась")
     
     elif celery_task.state == "STARTED":
-        return {"status": "STARTED", "message": "Задача выполняется"}
+        return CeleryTaskStatusResponse(status="STARTED", message="Задача выполняется")
     
     elif celery_task.state == "SUCCESS":
         result = celery_task.result
-        return {"status": "SUCCESS", "result": result}
+        return CeleryTaskStatusResponse(status="SUCCESS", result=result)
     
     elif celery_task.state == "FAILURE":
-        return {"status": "FAILURE", "message": "Задача завершилась с ошибкой"}
+        return CeleryTaskStatusResponse(status="FAILURE", message="Задача завершилась с ошибкой")
     
-    else:
-        return {"status": celery_task.state, "message": "Задача в неизвестном состоянии"}
+    return CeleryTaskStatusResponse(status=celery_task.state, message="Неизвестное состояние")
     
     
-@router.post("/{task_id}/segment/submit", status_code=status.HTTP_202_ACCEPTED, description="Сегментация аватарки задачи")
+@router.post("/{task_id}/segment/submit", status_code=status.HTTP_202_ACCEPTED, description="Сегментация аватарки задачи", response_model=CeleryTaskResponse)
 async def segment_image(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
@@ -334,10 +338,10 @@ async def segment_image(
         
     celery_task = segment_image_task.delay(task_id=task_id, image_path=image_path)
     
-    return {"message": "Задача на сегментацию изображения успешно создана", "celery_task_id": celery_task.id}
+    return CeleryTaskResponse(message="Задача на сегментацию изображения успешно создана", celery_task_id=celery_task.id)
 
 
-@router.get("/{task_id}/segment/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов сегментации аватарки задачи")
+@router.get("/{task_id}/segment/status/{celery_task_id}", status_code=status.HTTP_200_OK, description="Получение результатов сегментации аватарки задачи", response_model=CeleryTaskStatusResponse)
 async def get_segmentation_results(
     task_id: int = Path(...),
     celery_task_id: str = Path(...),
@@ -389,25 +393,30 @@ async def get_segmentation_results(
         )
         
     if celery_task.state == "PENDING":
-        return {"status": "PENDING", "message": "Задача еще не началась"}
+        return CeleryTaskStatusResponse(status="PENDING", message="Задача еще не началась")
     
     elif celery_task.state == "STARTED":
-        return {"status": "STARTED", "message": "Задача выполняется"}
+        return CeleryTaskStatusResponse(status="STARTED", message="Задача выполняется")
     
     elif celery_task.state == "SUCCESS":
-        return {"status": "SUCCESS", "result_path": f"segments/{task_id}_segmentation.png"}
+        return CeleryTaskStatusResponse(status="SUCCESS", result=f"segments/{task_id}_segmentation.png")
     
     elif celery_task.state == "FAILURE":
-        return {"status": "FAILURE", "message": "Задача завершилась с ошибкой"}
+        return CeleryTaskStatusResponse(status="FAILURE", message="Задача завершилась с ошибкой")
+    
+    return CeleryTaskStatusResponse(status=celery_task.state, message="Неизвестное состояние")
     
     
-@router.get("/{task_id}/segment/download/", status_code=status.HTTP_200_OK, description="Скачивание результатов сегментации аватарки задачи")
+@router.get("/{task_id}/segment/download/", status_code=status.HTTP_200_OK, description="Скачивание результатов сегментации аватарки задачи (возвращает image/png)")
 async def download_segmented_image(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session)
 ):
-    """Скачивание результатов сегментации аватарки задачи"""
+    """
+    Скачивание результатов сегментации аватарки задачи.
+    Возвращает изображение в формате PNG.
+    """
     
     if not current_user:
         raise HTTPException(

@@ -4,18 +4,18 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
-
 from app.db import Base
-from app.models import Task
-
+from app.core.config import Settings
+# Import all models to register them with SQLAlchemy
+from app import db_models  # noqa: F401
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
-config = context.config
+alembic_config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+if alembic_config.config_file_name is not None:
+    fileConfig(alembic_config.config_file_name)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -41,7 +41,9 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    # Convert async URL to sync for Alembic
+    settings = Settings()
+    url = settings.DATABASE_URL.replace("sqlite+aiosqlite://", "sqlite://")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -60,8 +62,14 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # Convert async URL to sync for Alembic
+    settings = Settings()
+    url = settings.DATABASE_URL.replace("sqlite+aiosqlite://", "sqlite://")
+    configuration = alembic_config.get_section(alembic_config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = url
+    
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

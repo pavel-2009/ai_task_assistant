@@ -2,14 +2,16 @@
 Роутер для управления задачами 
 """
 
-from fastapi import APIRouter, status, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, status, Depends, HTTPException, Path, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 
 import typing
 
 from app.db_models import Task, User
-from app.schemas import TaskCreate, TaskGet, TaskUpdate
+from app.schemas import (
+    TaskCreate, TaskGet, TaskUpdate, SuccessMessageResponse, TaskStatusResponse
+)
 from app.db import get_async_session
 from app.auth import get_current_user
 from app.ml.nlp.tasks import process_task_tags_and_embedding, update_recommendations_for_task
@@ -24,7 +26,7 @@ router = APIRouter(
 
 
 
-@router.get("/", status_code=status.HTTP_200_OK, description="Получение всех задач")
+@router.get("/", status_code=status.HTTP_200_OK, description="Получение всех задач", response_model=list[TaskGet])
 async def get_tasks(
     session: AsyncSession = Depends(get_async_session)
 ):
@@ -44,12 +46,11 @@ async def get_tasks(
     ]
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, description="Создание задачи")
+@router.post("/", status_code=status.HTTP_201_CREATED, description="Создание задачи", response_model=TaskGet)
 async def create_task(
     task: TaskCreate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session),
-    request: Request = None
+    session: AsyncSession = Depends(get_async_session)
 ):
     """Создание задачи"""
     
@@ -83,10 +84,10 @@ async def create_task(
         task_id=task.id,
     )
 
-    return task
+    return TaskGet(**task.model_dump())
 
 
-@router.get("/tasks/{task_id}/tags_status", status_code=status.HTTP_200_OK, description="Проверка статуса обработки тегов задачи")
+@router.get("/{task_id}/tags_status", status_code=status.HTTP_200_OK, description="Проверка статуса обработки тегов задачи", response_model=TaskStatusResponse)
 async def check_tags_status(
     task_id: int = Path(...),
     session: AsyncSession = Depends(get_async_session)
@@ -102,13 +103,13 @@ async def check_tags_status(
             detail="Задача с указанным ID не найдена"
         )
 
-    return {
-        "tags": task.tags,
-        "is_processing": task.tags is None
-    }
+    return TaskStatusResponse(
+        tags=task.tags,
+        is_processing=task.tags is None
+    )
 
 
-@router.get("/{task_id}", status_code=status.HTTP_200_OK, description="Получение задачи по ID")
+@router.get("/{task_id}", status_code=status.HTTP_200_OK, description="Получение задачи по ID", response_model=TaskGet)
 async def get_task(
     task: Task = Depends(get_task_or_404),
     current_user: User = Depends(get_current_user)
@@ -131,7 +132,7 @@ async def get_task(
     )
     
     
-@router.post("/{task_id}/like", status_code=status.HTTP_200_OK, description="Поставить лайк задаче")
+@router.post("/{task_id}/like", status_code=status.HTTP_200_OK, description="Поставить лайк задаче", response_model=SuccessMessageResponse)
 async def like_task(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
@@ -156,10 +157,10 @@ async def like_task(
         weight=1,
     )
 
-    return {"message": "Задаче поставлен лайк"}
+    return SuccessMessageResponse(message="Задаче поставлен лайк")
 
 
-@router.put("/{task_id}", status_code=status.HTTP_200_OK, description="Обновление задачи")
+@router.put("/{task_id}", status_code=status.HTTP_200_OK, description="Обновление задачи", response_model=TaskGet)
 async def update_task(
     task_id: int = Path(...),
     task_update: typing.Optional[TaskUpdate] = None,
@@ -203,11 +204,16 @@ async def update_task(
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT, description="Удаление задачи")
 async def delete_task(
     task_id: int = Path(...),
-    request: Request = None,
     session: AsyncSession = Depends(get_async_session),
-    task: Task = Depends(check_owner)
+    is_author: bool = Depends(check_owner)
 ):
     """Удаление задачи"""
+    
+    if not is_author:
+        raise HTTPException(
+            status_code=403,
+            detail="У вас нет прав на удаление этой задачи"
+        )
 
     # Удаляем вызовы взаимодействия текущей задачи
     delete_task_interactions.delay(
@@ -218,10 +224,6 @@ async def delete_task(
         delete(Task).where(Task.id == task_id)
     )
     
-    # Удаляем данные из векторной базы и семантического поиска
-    semantic_search_service = request.app.state.semantic_search_service
-    await semantic_search_service.delete(item_id=str(task_id), session=session)
-    
     await session.commit()
     
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
