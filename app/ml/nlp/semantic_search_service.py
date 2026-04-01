@@ -41,7 +41,7 @@ class SemanticSearchService:
 
         return normalized_text
 
-    async def index(self, text: str, session: AsyncSession, item_id: str | None = None) -> str:
+    async def index(self, text: str, session: AsyncSession, item_id: str | int | None = None) -> str:
         """Индексировать текст, добавляя его эмбеддинг в базу данных."""
         
         normalized_text = self._normalize_text(text, "Текст для индексирования")
@@ -57,22 +57,6 @@ class SemanticSearchService:
         
         return resolved_item_id
     
-    def index_sync(self, text: str, session: AsyncSession, item_id: str | None = None) -> str:
-        """Синхронный метод для индексирования текста, добавляя его эмбеддинг в базу данных."""
-        
-        normalized_text = self._normalize_text(text, "Текст для индексирования")
-        
-        embedding = self.embedding_service.encode_one(normalized_text)
-        
-        resolved_item_id = self.vector_db.add_sync(
-            embedding, session=session, item_id=item_id, text=normalized_text
-        )
-        
-        self.vector_db.save_to_redis_sync()
-        self.clear_cache_sync()
-        
-        return resolved_item_id
-
     async def search(self, query: str, session: AsyncSession, top_k: int = config.DEFAULT_TOP_K) -> list[dict]:
         """Искать документы, наиболее похожие на запрос."""
         normalized_query = self._normalize_text(query, "Запрос")
@@ -95,9 +79,9 @@ class SemanticSearchService:
         
         return sorted_docs
     
-    async def delete(self, item_id: str) -> None:
+    async def delete(self, item_id: str | int) -> None:
         """Удалить документ из базы данных и очистить кеш."""
-        await self.vector_db.delete(item_id)
+        await self.vector_db.delete(str(item_id))
         await self.clear_cache()
 
     def _get_cache_key(self, query: str, top_k: int) -> str:

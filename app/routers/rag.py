@@ -48,7 +48,9 @@ async def ask(
         if isinstance(result, dict):
             return AskResponse(
                 answer=result.get("answer", ""),
-                sources=result.get("sources")
+                sources=result.get("sources"),
+                confidence=result.get("confidence"),
+                cached=result.get("cached"),
             )
         return result
     except Exception as exc:

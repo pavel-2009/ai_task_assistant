@@ -60,10 +60,13 @@ class EmbeddingResponse(BaseModel):
 class SearchResultItem(BaseModel):
     """A single search result item."""
 
-    task_id: int = Field(description="Task ID")
+    text_id: str = Field(description="Text/document ID in vector index")
+    task_id: Optional[int] = Field(default=None, description="Task ID when text belongs to task")
+    text: Optional[str] = Field(default=None, description="Indexed source text")
     title: Optional[str] = Field(default=None, description="Task title")
     description: Optional[str] = Field(default=None, description="Task description")
-    score: Optional[float] = Field(default=None, description="Search relevance score")
+    similarity: Optional[float] = Field(default=None, description="Search relevance score")
+    score: Optional[float] = Field(default=None, description="Alias of similarity score")
 
 
 class SearchResults(BaseModel):
@@ -150,6 +153,8 @@ class AskResponse(BaseModel):
 
     answer: str = Field(description="Answer from RAG model")
     sources: Optional[list[dict]] = Field(default=None, description="Source documents used")
+    confidence: Optional[float] = Field(default=None, description="Average similarity confidence")
+    cached: Optional[bool] = Field(default=None, description="Whether result was loaded from cache")
 
 
 class NLPTagTaskResponse(BaseModel):

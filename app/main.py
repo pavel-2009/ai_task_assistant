@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response, status
@@ -16,7 +15,6 @@ from app.core import config
 from app.core.metrics import setup_metrics
 from app.db import close_redis, engine
 from app.error_handlers import register_exception_handlers
-from app.celery_app import celery_app
 from app.services import (
     get_embedding,
     get_llm,
@@ -49,7 +47,7 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing all services...")
         await ensure_services_initialized(
             use_onnx=config.USE_ONNX,
-            idx_to_class=config.INFERENCE_IDX_TO_CLASS,
+            inference_idx_to_class=config.INFERENCE_IDX_TO_CLASS,
         )
         logger.info("All services initialized successfully")
 
@@ -101,15 +99,6 @@ async def lifespan(app: FastAPI):
                     logger.info(f"Задача '{task_name}' отменена")
                 except Exception as e:
                     logger.warning(f"Ошибка при отмене задачи '{task_name}': {e}")
-        
-        # Даем Celery задачам 30 секунд на завершение
-        logger.info("Ожидаю завершения Celery задач (30 сек)...")
-        try:
-            # Отправляем сигнал graceful shutdown в Celery workers
-            celery_app.control.shutdown(timeout=30)
-            time.sleep(2)  # Даем время на обработку
-        except Exception as e:
-            logger.warning(f"Ошибка при shutdown Celery: {e}")
         
         # Закрываем Redis
         logger.info("Закрытие соединения с Redis...")
