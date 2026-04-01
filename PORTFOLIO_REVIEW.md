@@ -104,3 +104,53 @@
   - загрузка аватара → CV обработка,
   - поиск/RAG с источниками.
 - Отчёт о метриках и ограничениях (что именно оптимизировано и что пока упрощено).
+
+## 13) Список исправлений по файлам
+
+- `app/core/config.py`
+  - Удалить захардкоженный `LLM_API_KEY`, читать ключ только из переменных окружения.
+- `README.md`
+  - Добавить безопасную инструкцию запуска с `.env.example` и без публикации секретов.
+- `.env.example`
+  - Добавить шаблон env-переменных без реальных ключей/токенов.
+- `app/routers/tasks.py`
+  - Исправить вызов `semantic_search_service.delete(...)` (убрать лишний `session`).
+  - Исправить путь `"/tasks/{task_id}/tags_status"` на корректный относительный для роутера.
+  - Вернуть в `create_task` DTO (`TaskGet`) вместо ORM-объекта.
+  - Привести `DELETE /tasks/{task_id}` к корректному `204 No Content` без тела.
+- `app/ml/nlp/tasks.py`
+  - Заменить несуществующий `semantic_search_service.index_async(...)` на актуальный метод сервиса.
+  - Исправить вставку в `Text`: использовать `text_id` вместо несуществующего `item_id`.
+- `app/ml/nlp/semantic_search_service.py`
+  - Унифицировать контракты результата (`task_id`/`text_id`) и методы индексации/удаления.
+- `app/ml/nlp/vector_db.py`
+  - Привести к единому типу идентификаторы (`int`/`str`) и унифицировать формат ответов поиска.
+- `app/ml/recsys/vector_db/recsys_vector_db.py`
+  - Инициализировать `self._lock` в `__init__`.
+  - Исправить смешение sync/async Redis API и вызовы без `await`.
+  - Нормализовать сериализацию/десериализацию FAISS индекса.
+- `app/ml/monitoring/drift_detector.py`
+  - Исправить передачу эмбеддинга в `detector.add_embedding(...)` (убрать лишнюю вложенность).
+- `app/routers/monitoring.py`
+  - Разделить liveness/readiness в `ping`-эндпоинте.
+- `app/routers/*.py`
+  - Явно указать `response_model` для эндпоинтов и удалить неиспользуемые `request: Request = None`.
+- `app/schemas/*.py`
+  - Унифицировать структуру ошибок и DTO-контракты для фактических API-ответов.
+- `alembic/versions/*.py`
+  - Добавить миграции с FK, индексами, default-значениями и ограничениями целостности.
+- `requirements.txt`
+  - Перекодировать файл в UTF-8, убрать конфликтующие/дублирующиеся зависимости.
+- `prod_req.txt`
+  - Синхронизировать версии с основной спецификацией зависимостей.
+- `tests/test_tasks_crud.py`
+  - Добавить кейсы удаления задачи и синхронного удаления из векторной БД.
+- `tests/test_ner_integration.py`
+  - Перепроверить импорт/инициализацию, чтобы тесты стартовали в чистом окружении.
+- `tests/nlp/test_vector_db.py`
+  - Добавить тесты на единый формат ID и корректность поиска/удаления.
+- `tests/nlp/test_rag_service.py`
+  - Добавить тесты guardrails, timeout/fallback и cache behavior.
+- `.github/workflows/ci.yml`
+  - Добавить pipeline: lint + format check + tests + coverage + typing.
+
