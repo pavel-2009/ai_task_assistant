@@ -119,9 +119,15 @@ async def _train_collaborative_filtering_model_async():
     model = AlternatingLeastSquares(factors=50, regularization=0.01, iterations=20)
     
     async with async_session() as session:
-        user_item_matrix, user_to_idx, task_to_idx, unique_users, unique_tasks = await collaborative_filtering_recommender.build_user_item_matrix(session)
+        (
+            matrix,
+            user_to_idx,
+            idx_to_task,
+            unique_users,
+            unique_tasks
+        ) = await collaborative_filtering_recommender.build_user_item_matrix(session)
         
-        model.fit(user_item_matrix)
+        model.fit(matrix)
         
         # Вычленяем самые популярные задачи для новых пользователей (холодный старт)
         result = await session.execute(
@@ -135,4 +141,4 @@ async def _train_collaborative_filtering_model_async():
         
         redis_client = collaborative_filtering_recommender.redis_client
             
-        redis_client.set("collaborative_filtering_model", pickle.dumps((user_item_matrix, user_to_idx, task_to_idx, unique_users, unique_tasks, popular_tasks)))  # Сериализация модели в Redis
+        redis_client.set("collaborative_filtering_model", pickle.dumps((matrix, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks)))  # Сериализация модели в Redis

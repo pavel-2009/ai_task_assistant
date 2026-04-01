@@ -36,6 +36,7 @@ class CollaborativeFilteringRecommender:
         
         user_to_idx = {user: idx for idx, user in enumerate(unique_users)}
         task_to_idx = {task: idx for idx, task in enumerate(unique_tasks)}
+        idx_to_task = {idx: task for task, idx in task_to_idx.items()}
         
         rows = [user_to_idx[i.user_id] for i in interactions]
         cols = [task_to_idx[i.task_id] for i in interactions]
@@ -43,7 +44,7 @@ class CollaborativeFilteringRecommender:
         
         matrix = csr_matrix((data, (rows, cols)), shape=(len(unique_users), len(unique_tasks)))
         
-        return matrix, user_to_idx, task_to_idx, unique_users, unique_tasks
+        return matrix, user_to_idx, idx_to_task, unique_users, unique_tasks
         
         
     def load(self) -> tuple[np.ndarray, np.ndarray, dict, dict, dict, list] | tuple[None, None, None, None, None, list]:
@@ -51,8 +52,8 @@ class CollaborativeFilteringRecommender:
         
         model_data = self.redis_client.get("collaborative_filtering_model")
         if model_data:
-            user_factors, item_factors, user_to_idx, task_to_idx, idx_to_task, popular_tasks = pickle.loads(model_data)  # Десериализация модели из Redis
-            return user_factors, item_factors, user_to_idx, task_to_idx, idx_to_task, popular_tasks
+            matrix, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks = pickle.loads(model_data)  # Десериализация модели из Redis
+            return matrix, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks
         return None, None, None, None, None, []
 
 
@@ -65,8 +66,8 @@ class CollaborativeFilteringRecommender:
         if cached_recommendations:
             return pickle.loads(cached_recommendations)  # Десериализация рекомендаций из кэша
         
-        user_factors, item_factors, user_to_idx, task_to_idx, idx_to_task, popular_tasks = self.load()
-        if user_factors is None:
+        matrix, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks = self.load()
+        if matrix is None:
             return [(task_id, 0.0) for task_id in popular_tasks]  # Рекомендации на основе популярных задач для новых пользователей (холодный старт)
         
         # Если пользователь не найден в модели, возвращаем рекомендации на основе популярных задач (холодный старт)
@@ -74,11 +75,11 @@ class CollaborativeFilteringRecommender:
             return [(task_id, 0.0) for task_id in popular_tasks]  # Рекомендации на основе популярных задач для новых пользователей (холодный старт)
         
         # Получаем вектор факторов для данного пользователя
-        idx = user_to_idx[user_id]
-        user_vector = user_factors[idx]
+        user_idx = user_to_idx[user_id]
+        user_vector = matrix[user_idx]
         
         # Вычисляем предсказанные оценки для всех объектов
-        scores = item_factors.dot(user_vector)
+        scores = matrix.dot(user_vector)
         
         # Получаем топ-K рекомендаций
         top_k_indices = np.argsort(scores)[::-1][:top_k]
