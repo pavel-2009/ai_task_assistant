@@ -6,13 +6,11 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import update, insert, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import update, select
 
 import numpy as np
 
 import json
-import torch
 import asyncio
 
 from app.celery_app import celery_app
@@ -20,7 +18,7 @@ from app.celery_metrics import track_celery_task
 from app.services import get_ner, get_semantic_search, get_embedding, get_recsys_vector_db, get_image_embedding
 from app.db import async_session
 
-from app.db_models import Task, Text
+from app.db_models import Task
 
 
 logger = logging.getLogger(__name__)
@@ -53,14 +51,7 @@ async def _process_task_tags_and_embedding_async(task_id: int, title: str, descr
         await semantic_search_service.index(
             text=text,
             session=session,
-            item_id=task_id,
-        )
-
-        await session.execute(
-            insert(Text).values(
-                text_id=task_id,
-                text=text
-            )
+            item_id=str(task_id),
         )
         await session.commit()
     
@@ -93,11 +84,12 @@ async def _reindex_tasks_async():
         for task in tasks:
             text = f"{task.title}\n{task.description}"
             
-            if task.id not in semantic_search_service.vector_db.ids:
+            task_id = str(task.id)
+            if task_id not in semantic_search_service.vector_db.ids:
                 await semantic_search_service.index(
                     text=text,
                     session=session,
-                    item_id=task.id
+                    item_id=task_id
                 )
     
     
@@ -123,24 +115,19 @@ async def _update_recommendations_for_task_async(task_id: int):
         text = f"{task.title}\n{task.description}"
         avatar_file = task.avatar_file  # Путь к файлу аватара, если он есть
         
+        text_embedding = embedding_service.encode_one(text).astype(np.float32)
+        image_embedding = np.zeros(512, dtype=np.float32)
+
         if avatar_file:
             # Если есть аватар, нужно получить его эмбеддинг и объединить с текстовым
             image_embedding_service: ImageEmbeddingService = get_image_embedding()
-            
+
             with open(avatar_file, "rb") as f:
                 avatar_bytes = f.read()
-            image_embedding = image_embedding_service.get_embedding(avatar_bytes)
-            text_embedding = embedding_service.encode_one(text)
-            
-            # Объединяем эмбеддинги (например, конкатенацией)
-            embedding = np.concatenate([text_embedding, image_embedding])
-            
-        else:
+            image_embedding = image_embedding_service.get_embedding(avatar_bytes).astype(np.float32)
 
-            embedding = embedding_service.encode_one(text)
-            image_embedding = torch.zeros(512)  # Заполнитель для отсутствующего изображения, если размер эмбеддинга 896
-            
-            embedding = np.concatenate([embedding, image_embedding])
+        # Всегда собираем единый вектор в формате [text(384) + image(512)]
+        embedding = np.concatenate([text_embedding, image_embedding]).astype(np.float32)
             
         # Нормализуем эмбеддинг
         embedding = embedding / np.linalg.norm(embedding)    
@@ -149,10 +136,10 @@ async def _update_recommendations_for_task_async(task_id: int):
         rs_vector_db: RecSysVectorDB = get_recsys_vector_db()
         
         if rs_vector_db.ids_to_idx.get(str(task_id)) is not None:
-            rs_vector_db.update(item_id=str(task_id), embedding=embedding)
+            await rs_vector_db.update(item_id=str(task_id), embedding=embedding)
             
         else: 
-            rs_vector_db.add_vector(vector=embedding, task_id=str(task_id))
+            await rs_vector_db.add_vector(vector=embedding, task_id=str(task_id))
 
 
 @celery_app.task(name="warmup_llm", bind=True, max_retries=10)

@@ -38,12 +38,13 @@ class RAGService:
         """Форматирует найденные задачи для промпта."""
         result = []
         for i, task in enumerate(tasks, 1):
+            task_ref = task.get("task_id", task.get("text_id"))
             result.append(
                 f"""--- ЗАДАЧА {i} (похожесть: {task['similarity']:.2f}) ---
 Название: {task.get('title', 'Без названия')}
 Описание: {task.get('description', 'Нет описания')}
 Технологии: {task.get('tags', 'не указаны')}
-ID: {task.get('task_id')}"""
+ID: {task_ref}"""
             )
         return "\n".join(result)
     
@@ -53,6 +54,7 @@ ID: {task.get('task_id')}"""
         return [
             {
                 "task_id": task.get("task_id"),
+                "text_id": task.get("text_id"),
                 "title": task.get("title"),
                 "similarity": task.get("similarity"),
             }

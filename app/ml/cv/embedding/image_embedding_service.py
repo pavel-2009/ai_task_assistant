@@ -18,11 +18,12 @@ class ImageEmbeddingService:
     """Сервис для получения эмбеддингов изображений."""
     
     def __init__(self):
+        self.dimension = 512
         # Загружаем предобученную модель ResNet50
         self.model = models.resnet50(pretrained=True)
         
-        # Удаляем последний классификационный слой, оставляем только слои для извлечения признаков
-        self.model = torch.nn.Sequential(*list(self.model.children())[:-2])
+        # Удаляем только классификационный слой, оставляя GAP-представление размерности 2048
+        self.model = torch.nn.Sequential(*list(self.model.children())[:-1])
         
         self.model.eval()  # Устанавливаем модель в режим оценки
         
@@ -45,6 +46,15 @@ class ImageEmbeddingService:
         input_tensor = self.transform(img).unsqueeze(0)  # Добавляем размерность для батча
         
         with torch.no_grad():
-            embedding = self.model(input_tensor).squeeze().numpy()  # Получаем эмбеддинг и преобразуем в numpy массив
-            
-        return embedding
+            embedding_2048 = self.model(input_tensor).flatten().numpy().astype(np.float32)
+
+        # Приводим к фиксированной размерности 512 для совместимости с RecSys (384 + 512 = 896)
+        if embedding_2048.shape[0] >= self.dimension:
+            return embedding_2048[: self.dimension]
+
+        return np.pad(
+            embedding_2048,
+            (0, self.dimension - embedding_2048.shape[0]),
+            mode="constant",
+            constant_values=0.0,
+        )

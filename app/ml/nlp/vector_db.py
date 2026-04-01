@@ -54,7 +54,7 @@ class VectorDB:
         if vector.shape[0] != self.dim:
             raise ValueError(f"Размерность эмбеддинга должна быть равна {self.dim}")
 
-        resolved_item_id = item_id or str(uuid4())
+        resolved_item_id = str(item_id) if item_id is not None else str(uuid4())
         
         async with self._lock: # Блокируем для обеспечения потокобезопасности при добавлении в индекс и обновлении ids
             try:
@@ -95,7 +95,7 @@ class VectorDB:
         if texts is not None and len(texts) != batch_size:
             raise ValueError(f"Длина texts ({len(texts)}) не совпадает с количеством эмбеддингов ({batch_size})")
 
-        resolved_item_ids = item_ids or [str(uuid4()) for _ in range(batch_size)]
+        resolved_item_ids = [str(item_id) for item_id in item_ids] if item_ids is not None else [str(uuid4()) for _ in range(batch_size)]
         
         async with self._lock:
             try:
@@ -158,7 +158,18 @@ class VectorDB:
             
             for idx, sim in valid_entries:
                 text_id = self.ids[idx]
+                task_id = int(text_id) if text_id.isdigit() else None
+                text_value = text_map.get(text_id, "")
+                title, _, description = text_value.partition("\n")
                 results.append({"text_id": text_id, "similarity": float(sim), "text": text_map.get(text_id, "")})
+                results[-1].update(
+                    {
+                        "task_id": task_id,
+                        "title": title or None,
+                        "description": description or None,
+                        "score": float(sim),
+                    }
+                )
 
         return results
 

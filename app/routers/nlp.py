@@ -166,4 +166,6 @@ async def tag_task(request: Request, text: str = Body(...)):
     except Exception as exc:
         raise AppError("Ошибка при обработке текста NER сервисом", status_code=500) from exc
 
-    return NLPTagTaskResponse(tags=result)
+    technologies = result.get("technologies", []) if isinstance(result, dict) else []
+    tags = [name for name, _confidence in technologies]
+    return NLPTagTaskResponse(tags=tags)

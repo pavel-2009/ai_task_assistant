@@ -59,19 +59,25 @@ class ContentBasedRecommender:
         
         # Проверяем кэш
         cache_key = f"task_emb:{image}:{text}"
-        cached_emb = await self.recsys_vector_db.redis_client.get(cache_key)
+        redis_client = self.recsys_vector_db.redis_client
+        cached_emb = None
+        if redis_client is not None:
+            cached_emb = await redis_client.get(cache_key)
         
         if cached_emb is not None:
             return np.frombuffer(cached_emb, dtype=np.float32)
         
-        image_emb = await self._get_image_embedding(image)
-        text_emb = await self._get_text_embedding(text)
+        text_emb = np.asarray(await self._get_text_embedding(text), dtype=np.float32)
+        image_emb = np.zeros(512, dtype=np.float32)
+        if image:
+            image_emb = np.asarray(await self._get_image_embedding(image), dtype=np.float32)
         
-        # Объединяем эмбеддинги (можно использовать разные методы, например, конкатенацию или усреднение)
-        combined_emb = np.concatenate([image_emb, text_emb])
+        # Единый контракт эмбеддинга: [text(384) + image(512)] = 896
+        combined_emb = np.concatenate([text_emb, image_emb]).astype(np.float32)
         
         # Сохраняем в кэш
-        await self.recsys_vector_db.redis_client.set(cache_key, combined_emb.tobytes(), ex=86400)  # Кэшируем на 24 часа
+        if redis_client is not None:
+            await redis_client.set(cache_key, combined_emb.tobytes(), ex=86400)  # Кэшируем на 24 часа
         
         return combined_emb
     
@@ -107,28 +113,29 @@ class ContentBasedRecommender:
         """Находим похожие задачи на основе эмбеддингов."""
         
         # Ищем похожие задачи в векторной базе данных изображений
-        tasks = await self.recsys_vector_db.search(task_embedding, top_k=top_k)
-        if not tasks:
+        search_results = await self.recsys_vector_db.search(task_embedding, top_k=top_k)
+        if not search_results:
             return []
+        score_by_task_id = {int(task_id): float(score) for task_id, score in search_results}
+        found_task_ids = list(score_by_task_id.keys())
         
         # Получаем данные похожих задач из базы данных
         similar_tasks = []
         
-        tasks = await session.execute(select(Task).where(Task.id.in_(tasks)))
-        tasks = tasks.scalars().all()
+        tasks_result = await session.execute(select(Task).where(Task.id.in_(found_task_ids)))
+        tasks = tasks_result.scalars().all()
         
-        for task, score in tasks:
-            if author_id is not None:
-                if task.author_id != author_id:
-                    continue
-                similar_tasks.append({
-                    "id": task.id,
-                    "title": task.title,
-                    "description": task.description,
-                    "avatar_file": task.avatar_file,
-                    "tags": task.tags,
-                    "similarity_score": score
-                })     
+        for task in tasks:
+            if author_id is not None and task.author_id != author_id:
+                continue
+            similar_tasks.append({
+                "id": task.id,
+                "title": task.title,
+                "description": task.description,
+                "avatar_file": task.avatar_file,
+                "tags": task.tags,
+                "similarity_score": score_by_task_id.get(task.id, 0.0),
+            })
                    
         return similar_tasks
 
