@@ -124,10 +124,19 @@ async def _train_collaborative_filtering_model_async():
             user_to_idx,
             idx_to_task,
             unique_users,
-            unique_tasks
+            unique_tasks,
         ) = await collaborative_filtering_recommender.build_user_item_matrix(session)
         
         model.fit(matrix)
+        
+        # Получаем обученные факторы пользователей и задач
+        user_factors = model.user_factors
+        task_factors = model.item_factors
+        
+        if user_factors.shape[0] != len(unique_users) or task_factors.shape[0] != len(unique_tasks):
+            logger.error("Размерности факторов не совпадают с количеством уникальных пользователей или задач")
+            return
+
         
         # Вычленяем самые популярные задачи для новых пользователей (холодный старт)
         result = await session.execute(
@@ -141,4 +150,4 @@ async def _train_collaborative_filtering_model_async():
         
         redis_client = collaborative_filtering_recommender.redis_client
             
-        redis_client.set("collaborative_filtering_model", pickle.dumps((matrix, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks)))  # Сериализация модели в Redis
+        redis_client.set("collaborative_filtering_model", pickle.dumps((user_factors, task_factors, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks)))  # Сериализация модели в Redis

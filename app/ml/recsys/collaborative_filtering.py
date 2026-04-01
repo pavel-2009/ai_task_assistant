@@ -14,6 +14,11 @@ from sqlalchemy import select
 from app.core import config
 from app.db_models import Interaction
 
+import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 class CollaborativeFilteringRecommender:
     """Сервис для обработки взаимодействий пользователей с задачами и обновления рекомендаций на основе этих взаимодействий."""
@@ -47,14 +52,18 @@ class CollaborativeFilteringRecommender:
         return matrix, user_to_idx, idx_to_task, unique_users, unique_tasks
         
         
-    def load(self) -> tuple[np.ndarray, np.ndarray, dict, dict, dict, list] | tuple[None, None, None, None, None, list]:
+    def load(self) -> tuple[np.ndarray, np.ndarray, dict, dict, dict, dict, list] | tuple[None, None, None, None, None, None, list]:
         """Загрузка модели из Redis."""
         
         model_data = self.redis_client.get("collaborative_filtering_model")
         if model_data:
-            matrix, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks = pickle.loads(model_data)  # Десериализация модели из Redis
-            return matrix, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks
-        return None, None, None, None, None, []
+            user_factors, task_factors, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks = pickle.loads(model_data)  # Десериализация модели из Redis
+            
+            if user_factors.shape[0] != len(unique_users) or task_factors.shape[0] != len(unique_tasks):
+                logger.error("Размерности факторов не совпадают с количеством уникальных пользователей или задач при загрузке модели")
+                return None, None, None, None, None, None, []
+            return user_factors, task_factors, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks
+        return None, None, None, None, None, None, []
 
 
     def recommend(self, user_id: int, top_k: int = config.DEFAULT_TOP_K) -> list[tuple[int, float]]:
@@ -66,8 +75,12 @@ class CollaborativeFilteringRecommender:
         if cached_recommendations:
             return pickle.loads(cached_recommendations)  # Десериализация рекомендаций из кэша
         
-        matrix, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks = self.load()
-        if matrix is None:
+        user_factors, task_factors, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks = self.load()
+        if user_factors is None:
+            return [(task_id, 0.0) for task_id in popular_tasks]  # Рекомендации на основе популярных задач для новых пользователей (холодный старт)
+        
+        if user_factors.shape[0] != len(unique_users) or task_factors.shape[0] != len(unique_tasks):
+            logger.error("Размерности факторов не совпадают с количеством уникальных пользователей или задач при загрузке модели")
             return [(task_id, 0.0) for task_id in popular_tasks]  # Рекомендации на основе популярных задач для новых пользователей (холодный старт)
         
         # Если пользователь не найден в модели, возвращаем рекомендации на основе популярных задач (холодный старт)
@@ -76,10 +89,10 @@ class CollaborativeFilteringRecommender:
         
         # Получаем вектор факторов для данного пользователя
         user_idx = user_to_idx[user_id]
-        user_vector = matrix[user_idx]
+        user_vector = user_factors[user_idx]
         
         # Вычисляем предсказанные оценки для всех объектов
-        scores = matrix.dot(user_vector)
+        scores = task_factors.dot(user_vector)
         
         # Получаем топ-K рекомендаций
         top_k_indices = np.argsort(scores)[::-1][:top_k]
