@@ -71,7 +71,6 @@ def client2():
 def fresh_app_client():
     """Фикстура для создания свежего клиента с новым экземпляром приложения."""
     import sys
-    import importlib
     
     # Remove cached modules to force reimport
     modules_to_reload = [m for m in sys.modules if m.startswith('app')]
@@ -79,8 +78,17 @@ def fresh_app_client():
         del sys.modules[m]
     
     # Re-import to get a fresh app instance
-    from app import app
-    return TestClient(app)
+    from app import app as fresh_app
+    from app.db import Base, engine as fresh_engine
+    
+    # Создаём таблицы в новом engine
+    async def create_tables():
+        async with fresh_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    
+    asyncio.run(create_tables())
+    
+    return TestClient(fresh_app)
 
 
 @pytest.fixture
