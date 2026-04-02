@@ -1,9 +1,7 @@
-"""Юнит-тесты для модуля auth."""
+"""API-тесты для модуля auth."""
 
 import pytest
 import asyncio
-
-from tests import conftest
 
 
 # Test token expiration first (before rate limiting tests exhaust the limit)
