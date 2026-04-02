@@ -63,10 +63,10 @@ async def test_login_empty_fields(client):
     """Тестирование входа с пустыми полями."""
     response = client.post("/auth/login", data={"username": "", "password": "testpass"})
     assert response.status_code == 400  # Unprocessable Entity
-    assert response.json().get("detail") == "Неверное имя пользователя или пароль"
+    assert response.json().get("detail") == "Имя пользователя и пароль не могут быть пустыми"
     response = client.post("/auth/login", data={"username": "testuser", "password": ""})
     assert response.status_code == 400  # Unprocessable Entity
-    assert response.json().get("detail") == "Неверное имя пользователя или пароль"
+    assert response.json().get("detail") == "Имя пользователя и пароль не могут быть пустыми"
     
     
 @pytest.mark.asyncio
