@@ -29,8 +29,9 @@ def setup_database():
     
     # For in-memory SQLite, use sync engine to create tables
     if "sqlite" in database_url and "memory" in database_url:
-        sync_url = database_url.replace("aiosqlite", "sqlite")
-        engine = create_engine(sync_url)
+        # Convert async URL to sync URL for table creation
+        sync_url = "sqlite:///:memory:"
+        engine = create_engine(sync_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(engine)
         engine.dispose()
     
