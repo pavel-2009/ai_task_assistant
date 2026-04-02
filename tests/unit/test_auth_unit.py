@@ -13,7 +13,7 @@ from app.db_models import Base
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="function")
 async def auth_sessionmaker():
     engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
     async with engine.begin() as conn:
