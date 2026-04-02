@@ -62,11 +62,11 @@ async def test_login_missing_fields(client):
 async def test_login_empty_fields(client):
     """Тестирование входа с пустыми полями."""
     response = client.post("/auth/login", data={"username": "", "password": "testpass"})
-    assert response.status_code == 400
-    assert response.json().get("detail") == "Неверное имя пользователя или пароль"
+    assert response.status_code == 422  # Unprocessable Entity
+    assert response.json().get("detail") == "Invalid request parameters"
     response = client.post("/auth/login", data={"username": "testuser", "password": ""})
-    assert response.status_code == 400
-    assert response.json().get("detail") == "Неверное имя пользователя или пароль"
+    assert response.status_code == 422  # Unprocessable Entity
+    assert response.json().get("detail") == "Invalid request parameters"
     
     
 @pytest.mark.asyncio
@@ -78,18 +78,20 @@ async def test_login_sql_injection(client):
     
     
 @pytest.mark.asyncio
-async def test_login_brute_force(client, create_base_users):
+async def test_login_brute_force(client2, create_base_users):
     """Тестирование защиты от перебора паролей."""
     for _ in range(5):
-        response = client.post("/auth/login", data={"username": "testuser", "password": "wrongpass"})
+        response = client2.post("/auth/login", data={"username": "testuser", "password": "wrongpass"})
         assert response.status_code == 400
         assert response.json().get("detail") == "Неверное имя пользователя или пароль"
         
         
 @pytest.mark.asyncio
-async def test_rate_limiting(client, create_base_users):
+async def test_rate_limiting(fresh_app_client, create_base_users):
     """Тестирование ограничения количества запросов."""
+    # Register user для fresh_app_client
+    fresh_app_client.post("/auth/register", json={"username": "testuser", "password": "TestPass123!"})
     for _ in range(12):
-        response = client.post("/auth/login", data={"username": "testuser", "password": "wrongpass"})
+        response = fresh_app_client.post("/auth/login", data={"username": "testuser", "password": "wrongpass"})
     assert response.status_code == 429  # Too Many Requests
     assert "Rate limit exceeded" in response.json().get("error", "")

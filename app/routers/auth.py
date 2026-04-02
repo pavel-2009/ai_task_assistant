@@ -30,6 +30,12 @@ async def register_new_user(
     session: AsyncSession = Depends(get_async_session)
 ):
     """Регистрация нового пользователя"""
+    
+    if not user_payload.username or not user_payload.password:
+        raise HTTPException(
+            status_code=400,
+            detail="Имя пользователя и пароль не могут быть пустыми"
+        )
 
     user = await session.execute(select(User).where(User.username == user_payload.username))
     user = user.scalar_one_or_none()
@@ -71,6 +77,12 @@ async def login_user(
     session: AsyncSession = Depends(get_async_session)
 ):
     """Аутентификация пользователя"""
+    
+    if not form_data.username or not form_data.password:
+        raise HTTPException(
+            status_code=400,
+            detail="Имя пользователя и пароль не могут быть пустыми"
+        )
 
     user = await session.execute(select(User).where(User.username == form_data.username))
     user = user.scalar_one_or_none()

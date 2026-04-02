@@ -54,7 +54,7 @@ async def create_task(
 ):
     """Создание задачи"""
     
-    task = Task(**task.dict())
+    task = Task(**task.model_dump())
     task.author_id = current_user.id
     task.tags = None  # Изначально теги не установлены, они будут обработаны в фоне
     
