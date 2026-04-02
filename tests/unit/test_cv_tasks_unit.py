@@ -51,7 +51,8 @@ def test_detect_and_visualize_task_success(tmp_path, monkeypatch):
     result = cv_tasks.detect_and_visualize_task(task_id=55, image_path=str(image_path))
 
     assert result["detections"][0]["label"] == "cat"
-    assert result["visualized_image"] == "avatars\\55_detected.jpg"
+    # Нормализуем пути для кроссплатформной совместимости
+    assert result["visualized_image"].replace("\\", "/") == "avatars/55_detected.jpg"
 
 
 @pytest.mark.unit

@@ -1,6 +1,10 @@
 """Базовые настройки и фикстуры для тестов."""
 
 import pytest
+import os
+
+# Устанавливаем переменную окружения ПЕРЕД импортом конфига
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from fastapi.testclient import TestClient
 
@@ -35,20 +39,14 @@ def clean_metrics_registry():
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
     """Фикстура для создания всех таблиц в базе данных перед тестами."""
-    from app.db_models import Base
-    from sqlalchemy import create_engine
-    import os
+    from app.db import Base, engine
+    import asyncio
     
-    # Get database URL from environment or use default
-    database_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+    async def create_tables():
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     
-    # For in-memory SQLite, use sync engine to create tables
-    if "sqlite" in database_url and "memory" in database_url:
-        # Convert async URL to sync URL for table creation
-        sync_url = "sqlite:///:memory:"
-        engine = create_engine(sync_url, connect_args={"check_same_thread": False})
-        Base.metadata.create_all(engine)
-        engine.dispose()
+    asyncio.run(create_tables())
     
     yield
 
