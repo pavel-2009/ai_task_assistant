@@ -10,7 +10,7 @@ jobs:
         runs-on: ubuntu-22.04
         steps:
         - uses: actions/checkout@v4
-        
+
         - name: Set up Python 3.11
           uses: actions/setup-python@v5
           with:
@@ -23,7 +23,12 @@ jobs:
         
         - name: Migrate database
           env:
+            SECRET_KEY: "test-secret-key-for-ci"
             DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+            REDIS_URL: "redis://localhost:6379/0"
+            CELERY_BROKER_URL: "redis://localhost:6379/0"
+            CELERY_RESULT_BACKEND: "redis://localhost:6379/0"
+            LLM_API_KEY: "test-api-key"
           run: |
             alembic upgrade head
 
