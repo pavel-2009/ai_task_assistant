@@ -2,14 +2,17 @@
 
 import pytest
 import os
+import asyncio
 
 # Устанавливаем переменную окружения ПЕРЕД импортом конфига
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
+# Импортируем app СРАЗУ для инициализации engine с тестовой БД
+from app import app  # noqa
 from fastapi.testclient import TestClient
 
 
-# Телнологии в описаниях задач для тестирования
+# Технологии в описаниях задач для тестирования
 TECHNOLOGIES = [
     'Python', 'JavaScript', 'Java', 'C#', 'Ruby', 'Go', 'PHP', 'Swift', 'Kotlin', 'TypeScript'
 ]
@@ -38,9 +41,8 @@ def clean_metrics_registry():
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
-    """Фикстура для создания всех таблиц в базе данных перед тестами."""
+    """Фикстура для создания всех таблиц в базе данных перед тестами - ОДИН РАЗ для всей сессии."""
     from app.db import Base, engine
-    import asyncio
     
     async def create_tables():
         async with engine.begin() as conn:
@@ -54,7 +56,6 @@ def setup_database():
 @pytest.fixture
 def client():
     """Фикстура для создания тестового клиента."""
-    from app import app
     return TestClient(app)
 
 
