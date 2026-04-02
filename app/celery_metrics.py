@@ -12,26 +12,18 @@ from prometheus_client import Counter, Histogram, REGISTRY
 
 def _get_or_create_histogram(name: str, documentation: str, labelnames: list, buckets: list = None):
     """Get histogram from registry or create if not exists."""
-    try:
-        return Histogram(name, documentation, labelnames, buckets=buckets)
-    except ValueError:
-        # Уже зарегистрирован, извлекаем из реестра
-        for collector in REGISTRY._collector_to_names:
-            if getattr(collector, '_name', None) == name:
-                return collector
-        raise
+    # Check if already registered
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return Histogram(name, documentation, labelnames, buckets=buckets)
 
 
 def _get_or_create_counter(name: str, documentation: str, labelnames: list):
     """Get counter from registry or create if not exists."""
-    try:
-        return Counter(name, documentation, labelnames)
-    except ValueError:
-        # Уже зарегистрирован, извлекаем из реестра
-        for collector in REGISTRY._collector_to_names:
-            if getattr(collector, '_name', None) == name:
-                return collector
-        raise
+    # Check if already registered
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return Counter(name, documentation, labelnames)
 
 
 celery_task_duration = _get_or_create_histogram(

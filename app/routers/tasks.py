@@ -54,7 +54,7 @@ async def create_task(
 ):
     """Создание задачи"""
     
-    task = Task(**task.model_dump())
+    task = Task(**task.dict())
     task.author_id = current_user.id
     task.tags = None  # Изначально теги не установлены, они будут обработаны в фоне
     
@@ -84,7 +84,12 @@ async def create_task(
         task_id=task.id,
     )
 
-    return TaskGet(**task.model_dump())
+    return TaskGet(
+        id=task.id,
+        title=task.title,
+        description=task.description,
+        author_id=task.author_id
+    )
 
 
 @router.get("/{task_id}/tags_status", status_code=status.HTTP_200_OK, description="Проверка статуса обработки тегов задачи", response_model=TaskStatusResponse)

@@ -1,26 +1,21 @@
-"""Юнит-тесты auth-утилит c использованием test.db."""
+"""Юнит-тесты auth-утилит c использованием in-memory SQLite."""
 
 from datetime import timedelta
-from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app import auth
 from app.db_models import Base
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-TEST_DB_PATH = PROJECT_ROOT / "test.db"
-TEST_DB_URL = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
+TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
-@pytest.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module")
 async def auth_sessionmaker():
-    if TEST_DB_PATH.exists():
-        TEST_DB_PATH.unlink()
-
-    engine = create_async_engine(TEST_DB_URL)
+    engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -28,8 +23,6 @@ async def auth_sessionmaker():
     yield maker
 
     await engine.dispose()
-    if TEST_DB_PATH.exists():
-        TEST_DB_PATH.unlink()
 
 
 @pytest.mark.unit

@@ -1,7 +1,6 @@
 """Базовые настройки и фикстуры для тестов."""
 
 import pytest
-import asyncio
 
 from fastapi.testclient import TestClient
 
@@ -15,6 +14,22 @@ TECHNOLOGIES = [
 FAKE_TASKS = [
     {"title": f"Task {i}", "description": f"Description for task {i}: {TECHNOLOGIES[i % len(TECHNOLOGIES)]}"} for i in range(1, 11)
 ]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def clean_metrics_registry():
+    """Очищает реестр метрик перед запуском всех тестов, чтобы избежать дублирования."""
+    from prometheus_client import REGISTRY
+    
+    # Удаляем все метрики перед тестами
+    collectors_to_remove = list(REGISTRY._collector_to_names.keys())
+    for collector in collectors_to_remove:
+        try:
+            REGISTRY.unregister(collector)
+        except Exception:
+            pass
+    
+    yield
 
 
 @pytest.fixture(scope="session", autouse=True)

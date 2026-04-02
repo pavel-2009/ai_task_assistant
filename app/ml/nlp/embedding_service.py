@@ -23,7 +23,7 @@ class EmbeddingService:
             device="cuda" if torch.cuda.is_available() else "cpu",
         )
         self.metrics.record_load_time(time.perf_counter() - load_start)
-        self.dimension = self.model.get_sentence_embedding_dimension()
+        self.dimension = self.model.get_sentence_embedding_dimension() # Получаем размерность эмбеддингов модели (384 для all-MiniLM-L6-v2)
 
     @staticmethod
     def _normalize_text(text: str) -> str:
