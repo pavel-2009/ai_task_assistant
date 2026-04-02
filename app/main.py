@@ -123,6 +123,12 @@ app = FastAPI(lifespan=lifespan)
 setup_metrics(app, enabled=config.METRICS_ENABLED, path=config.METRICS_PATH)
 register_exception_handlers(app)
 
+from app.core.rate_limit import limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 from .routers import auth, avatars, nlp, rag, streaming, tasks, monitoring
 

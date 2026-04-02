@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str
     CELERY_RESULT_BACKEND: str
 
-    JWT_EXPIRE_MINUTES: int = 60
+    JWT_EXPIRE_MINUTES: int = 1
     JWT_ALGORITHM: str = "HS256"
     USE_ONNX: bool = False
 

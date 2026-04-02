@@ -2,7 +2,7 @@
 Роутер для аутентификации и авторизации пользователей.
 """
 
-from fastapi import APIRouter, status, Depends, HTTPException
+from fastapi import APIRouter, status, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ router = APIRouter(
 @limiter.limit("5/minute")  # Ограничение на 5 запросов в минуту для всех эндпоинтов в этом роутере
 @router.post("/register", status_code=status.HTTP_201_CREATED, description="Регистрация нового пользователя", response_model=UserGet)
 async def register_new_user(
+    request: Request,
     user_payload: UserCreate,
     session: AsyncSession = Depends(get_async_session)
 ):
@@ -62,9 +63,10 @@ async def register_new_user(
     )
 
 
-@limiter.limit("10/minute")  # Ограничение на 10 запросов в минуту для эндпоинта логина
 @router.post("/login", status_code=status.HTTP_200_OK, description="Аутентификация пользователя", response_model=TokenResponse)
+@limiter.limit("10/minute")  # Ограничение на 10 запросов в минуту для эндпоинта логина
 async def login_user(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_async_session)
 ):
