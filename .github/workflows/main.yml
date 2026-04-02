@@ -19,5 +19,12 @@ jobs:
             python -m pip install --upgrade pip
             pip install -r prod_req.txt
         - name: Run tests
+          env:
+            SECRET_KEY: "test-secret-key-for-ci"
+            DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+            REDIS_URL: "redis://localhost:6379/0"
+            CELERY_BROKER_URL: "redis://localhost:6379/0"
+            CELERY_RESULT_BACKEND: "redis://localhost:6379/0"
+            LLM_API_KEY: "test-api-key"
           run: |
             python -m pytest --cov=app tests/
