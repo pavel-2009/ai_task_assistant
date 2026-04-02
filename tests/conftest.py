@@ -1,6 +1,7 @@
 """Базовые настройки и фикстуры для тестов."""
 
 import pytest
+import asyncio
 
 from fastapi.testclient import TestClient
 
@@ -15,11 +16,33 @@ FAKE_TASKS = [
     {"title": f"Task {i}", "description": f"Description for task {i}: {TECHNOLOGIES[i % len(TECHNOLOGIES)]}"} for i in range(1, 11)
 ]
 
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_database():
+    """Фикстура для создания всех таблиц в базе данных перед тестами."""
+    from app.db_models import Base
+    from sqlalchemy import create_engine
+    import os
+    
+    # Get database URL from environment or use default
+    database_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+    
+    # For in-memory SQLite, use sync engine to create tables
+    if "sqlite" in database_url and "memory" in database_url:
+        sync_url = database_url.replace("aiosqlite", "sqlite")
+        engine = create_engine(sync_url)
+        Base.metadata.create_all(engine)
+        engine.dispose()
+    
+    yield
+
+
 @pytest.fixture
 def client():
     """Фикстура для создания тестового клиента."""
     from app import app
     return TestClient(app)
+
 
 
 @pytest.fixture
