@@ -29,5 +29,6 @@ jobs:
             CELERY_BROKER_URL: "redis://localhost:6379/0"
             CELERY_RESULT_BACKEND: "redis://localhost:6379/0"
             LLM_API_KEY: "test-api-key"
+            METRICS_ENABLED: "false"
           run: |
             python -m pytest --cov=app tests/
