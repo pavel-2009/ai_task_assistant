@@ -47,7 +47,7 @@ class SimpleCNN(nn.Module):
         return x
     
 
-def get_pretrained_model() -> nn.Module:
+def get_pretrained_model(num_classes: int | None = None) -> nn.Module:
     """Загрузка предобученной модели ResNet18"""
 
     model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
@@ -56,6 +56,6 @@ def get_pretrained_model() -> nn.Module:
         param.requires_grad = False
 
     num_features = model.fc.in_features
-    model.fc = nn.Linear(num_features, config.num_classes)
+    model.fc = nn.Linear(num_features, num_classes or config.num_classes)
 
     return model

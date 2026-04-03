@@ -62,11 +62,11 @@ async def test_login_missing_fields(client):
 async def test_login_empty_fields(client):
     """Тестирование входа с пустыми полями."""
     response = client.post("/auth/login", data={"username": "", "password": "testpass"})
-    assert response.status_code == 400  # Unprocessable Entity
-    assert response.json().get("detail") == "Имя пользователя и пароль не могут быть пустыми"
+    assert response.status_code == 422  # Unprocessable Entity
+    assert response.json().get("detail") == "Invalid request parameters"
     response = client.post("/auth/login", data={"username": "testuser", "password": ""})
-    assert response.status_code == 400  # Unprocessable Entity
-    assert response.json().get("detail") == "Имя пользователя и пароль не могут быть пустыми"
+    assert response.status_code == 422  # Unprocessable Entity
+    assert response.json().get("detail") == "Invalid request parameters"
     
     
 @pytest.mark.asyncio
@@ -95,3 +95,45 @@ async def test_rate_limiting(fresh_app_client, create_base_users):
         response = fresh_app_client.post("/auth/login", data={"username": "testuser", "password": "wrongpass"})
     assert response.status_code == 429  # Too Many Requests
     assert "Rate limit exceeded" in response.json().get("error", "")
+    
+@pytest.mark.asyncio
+async def test_login_unexisting_user(client):
+    """Тестирование входа с несуществующим пользователем."""
+    response = client.post("/auth/login", data={"username": "ghostuser", "password": "GhostPass123!"})
+    assert response.status_code == 400
+    assert response.json().get("detail") == "Неверное имя пользователя или пароль"
+
+    
+# Тестирование регистрации
+@pytest.mark.asyncio
+async def test_registration(client):
+    """Тестирование успешной регистрации."""
+    response = client.post("/auth/register", json={"username": "newuser", "password": "NewPass123!"})
+    assert response.status_code == 201
+    assert response.json().get("username") == "newuser"
+    assert response.json().get("id") is not None
+    
+    
+@pytest.mark.asyncio
+async def test_registration_existing_user(client, create_base_users):
+    """Тестирование регистрации с уже существующим именем пользователя."""
+    response = client.post("/auth/register", json={"username": "testuser", "password": "TestPass123!"})
+    assert response.status_code == 400
+    assert response.json().get("detail") == "Пользователь с таким именем уже существует"
+    
+
+@pytest.mark.asyncio
+async def test_registration_invalid_password(client):
+    """Тестирование регистрации с недопустимым паролем."""
+    response = client.post("/auth/register", json={"username": "user2", "password": "short"})
+    assert response.status_code == 422  # Pydantic validation error
+    
+    
+@pytest.mark.asyncio
+async def test_registration_missing_fields(client):
+    """Тестирование регистрации с отсутствующими полями."""
+    response = client.post("/auth/register", json={"username": "user3"})
+    assert response.status_code == 422  # Unprocessable Entity
+    response = client.post("/auth/register", json={"password": "TestPass123!"})
+    assert response.status_code == 422  # Unprocessable Entity
+        

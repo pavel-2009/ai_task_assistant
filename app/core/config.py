@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     LLM_API_KEY: str
     LLM_TIMEOUT_SECONDS: float = 60.0
     
-    INFERENCE_IDX_TO_CLASS: dict[int, str] = {i: c for i, c in enumerate(torchvision.models.ResNet50_Weights.DEFAULT.meta["categories"])}
+    INFERENCE_IDX_TO_CLASS: dict[int, str] = {0: "cat", 1: "dog", 2: "house"}
     
     USER_PROMPT: str = """Вот похожие задачи из системы:
 

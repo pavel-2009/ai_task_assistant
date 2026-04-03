@@ -27,8 +27,8 @@ class InferenceService:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         load_start = time.perf_counter()
-        self.model: nn.Module = get_pretrained_model()
-        self.model.load_state_dict(torch.load(self.checkpoints_path))
+        self.model: nn.Module = get_pretrained_model(num_classes=len(self.idx_to_class) or None)
+        self.model.load_state_dict(torch.load(self.checkpoints_path), strict=False)
         self.model.to(self.device)
         self.model.eval()
         self.metrics.record_load_time(time.perf_counter() - load_start)

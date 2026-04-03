@@ -42,3 +42,40 @@ async def test_get_current_user_invalid_token(auth_sessionmaker):
         with pytest.raises(auth.HTTPException) as exc:
             await auth.get_current_user(token="broken.token", session=session)
         assert exc.value.status_code == 401
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_current_user_valid_token(auth_sessionmaker):
+    """Тестирование получения пользователя по валидному токену."""
+    from app.db_models import User
+    
+    async with auth_sessionmaker() as session:
+        # Создаем пользователя в БД
+        user = User(username="testuser", password="hashed_password")
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        
+        # Создаем токен для этого пользователя
+        token = auth.create_access_token(user_id=user.id)
+        
+        # Получаем пользователя по токену
+        result_user = await auth.get_current_user(token=token, session=session)
+        
+        assert result_user.id == user.id
+        assert result_user.username == "testuser"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_current_user_nonexistent_user(auth_sessionmaker):
+    """Тестирование получения несуществующего пользователя."""
+    async with auth_sessionmaker() as session:
+        # Создаем токен для несуществующего пользователя
+        token = auth.create_access_token(user_id=9999)
+        
+        # Должно вернуть ошибку
+        with pytest.raises(auth.HTTPException) as exc:
+            await auth.get_current_user(token=token, session=session)
+        assert exc.value.status_code == 401

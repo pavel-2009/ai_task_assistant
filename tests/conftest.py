@@ -22,6 +22,14 @@ FAKE_TASKS = [
     {"title": f"Task {i}", "description": f"Description for task {i}: {TECHNOLOGIES[i % len(TECHNOLOGIES)]}"} for i in range(1, 11)
 ]
 
+# 20 фальшивых задач для тестирования (10 для каждого пользователя)
+FAKE_TASKS_USER1 = [
+    {"title": f"Task {i}", "description": f"Description for task {i}: {TECHNOLOGIES[i % len(TECHNOLOGIES)]}"} for i in range(1, 11)
+]
+FAKE_TASKS_USER2 = [
+    {"title": f"Task {i}", "description": f"Description for task {i}: {TECHNOLOGIES[i % len(TECHNOLOGIES)]}"} for i in range(11, 21)
+]
+
 
 @pytest.fixture(scope="session", autouse=True)
 def clean_metrics_registry():
@@ -68,6 +76,36 @@ def client2():
 
 
 @pytest.fixture
+def auth_token(client, create_base_users):
+    """Фикстура для получения токена аутентификации."""
+    response = client.post("/auth/login", data={"username": "testuser", "password": "TestPass123!"})
+    assert response.status_code == 200
+    return response.json().get("access_token")
+
+
+@pytest.fixture
+def authorized_client(client, auth_token):
+    """Фикстура для создания авторизованного клиента."""
+    client.headers.update({"Authorization": f"Bearer {auth_token}"})
+    return client
+
+
+@pytest.fixture
+def authorized_client2(client2, auth_token2, create_base_users):
+    """Фикстура для создания второго авторизованного клиента."""
+    client2.headers.update({"Authorization": f"Bearer {auth_token2}"})
+    return client2
+
+
+@pytest.fixture
+def create_tasks_for_auth_client2(authorized_client2):
+    """Фикстура для создания задач для второго авторизованного клиента."""
+    for task in FAKE_TASKS:
+        response = authorized_client2.post("/tasks/", json=task)
+        assert response.status_code == 201
+
+
+@pytest.fixture
 def fresh_app_client():
     """Фикстура для создания свежего клиента с новым экземпляром приложения."""
     import sys
@@ -100,10 +138,10 @@ def auth_token1(client, create_base_users):
 
 
 @pytest.fixture
-def auth_token2(client, create_base_users):
+def auth_token2(client2, create_base_users):
     """Фикстура для получения второго токена аутентификации."""
-    response = client.post("/auth/login", data={"username": "testuser2", "password": "TestPass456!"})
-    assert response.status_code == 200
+    response = client2.post("/auth/login", data={"username": "testuser2", "password": "TestPass456!"})
+    assert response.status_code == 200, f"Login failed: {response.json()}"
     return response.json().get("access_token")
 
 
@@ -128,18 +166,32 @@ def create_base_users2(client2):
 
 @pytest.fixture()
 def create_base_tasks(client, auth_token):
-    """Фикстура для создания базовых задач."""
-    for task in FAKE_TASKS:
-        response = client.post("/tasks/", data=task, headers={"Authorization": f"Bearer {auth_token}"})
-        assert response.status_code == 200
+    """Фикстура для создания базовых задач (1-10) для первого пользователя."""
+    for task in FAKE_TASKS_USER1:
+        response = client.post("/tasks/", json=task, headers={"Authorization": f"Bearer {auth_token}"})
+        assert response.status_code == 201
         
         
 @pytest.fixture()
 def create_base_tasks_for_user2(client, auth_token2):
-    """Фикстура для создания базовых задач для второго пользователя."""
-    for task in FAKE_TASKS:
+    """Фикстура для создания базовых задач (11-20) для второго пользователя."""
+    for task in FAKE_TASKS_USER2:
         response = client.post("/tasks/", json=task, headers={"Authorization": f"Bearer {auth_token2}"})
-        assert response.status_code == 200
+        assert response.status_code == 201
+
+
+@pytest.fixture()
+def create_all_base_tasks(client, auth_token, auth_token2):
+    """Фикстура для создания всех базовых задач (1-10 для user1, 11-20 для user2)."""
+    # Создаем задачи 1-10 для первого пользователя
+    for task in FAKE_TASKS_USER1:
+        response = client.post("/tasks/", json=task, headers={"Authorization": f"Bearer {auth_token}"})
+        assert response.status_code == 201
+    
+    # Создаем задачи 11-20 для второго пользователя
+    for task in FAKE_TASKS_USER2:
+        response = client.post("/tasks/", json=task, headers={"Authorization": f"Bearer {auth_token2}"})
+        assert response.status_code == 201
         
         
 @pytest.fixture()

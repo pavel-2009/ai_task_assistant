@@ -13,7 +13,7 @@ from app.schemas import UserCreate, UserGet, TokenResponse
 from app.db import get_async_session
 from app.auth import create_access_token
 from app.core.rate_limit import limiter
-from app.core.security import validate_password_strength, hash_password, verify_password
+from app.core.security import hash_password, verify_password
 
 
 router = APIRouter(
@@ -45,15 +45,9 @@ async def register_new_user(
             status_code=400,
             detail="Пользователь с таким именем уже существует"
         )
-        
-    password = user_payload.password
-    if not validate_password_strength(password):
-        raise HTTPException(
-            status_code=400,
-            detail="Пароль должен быть не менее 8 символов, содержать заглавные и строчные буквы, цифры и специальные символы"
-        )
-
-    hashed_password = hash_password(password)
+    
+    # Пароль уже проверен в схеме Pydantic UserCreate
+    hashed_password = hash_password(user_payload.password)
 
     new_user = User(
         username=user_payload.username,
