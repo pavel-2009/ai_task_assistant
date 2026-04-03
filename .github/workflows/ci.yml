@@ -8,6 +8,16 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
 
     env:
       SECRET_KEY: test-secret-key
@@ -32,6 +42,33 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r prod_req.txt
 
+      - name: Wait for Redis
+        run: |
+          python - <<'PY'
+          import socket
+          import time
+
+          deadline = time.time() + 30
+          while time.time() < deadline:
+            try:
+              with socket.create_connection(("localhost", 6379), timeout=1) as sock:
+                sock.sendall(b"*1\r\n$4\r\nPING\r\n")
+                if b"PONG" in sock.recv(32):
+                  print("Redis is ready")
+                  raise SystemExit(0)
+            except OSError:
+              pass
+            time.sleep(1)
+
+          raise SystemExit("Redis did not become ready in time")
+          PY
+
+      - name: Start Celery worker
+        run: |
+          celery -A app.celery_app.celery_app worker --loglevel=info --pool=solo --detach --pidfile=/tmp/celery-ci.pid --logfile=/tmp/celery-ci.log
+          sleep 5
+          celery -A app.celery_app.celery_app inspect ping
+
       - name: Run tests (tolerant to known 400/422 variance)
         run: |
           set -euo pipefail
@@ -39,3 +76,10 @@ jobs:
             echo "Primary run failed. Retrying without known flaky status-code case..."
             pytest -q tests/unit tests/api -k 'not test_login_missing_fields' --maxfail=1
           }
+
+      - name: Stop Celery worker
+        if: always()
+        run: |
+          if [ -f /tmp/celery-ci.pid ]; then
+            kill "$(cat /tmp/celery-ci.pid)" || true
+          fi
