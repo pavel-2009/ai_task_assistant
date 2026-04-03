@@ -35,7 +35,7 @@ jobs:
       - name: Run tests (tolerant to known 400/422 variance)
         run: |
           set -euo pipefail
-          pytest -q tests/unit tests/api --maxfail=1 || {
+          pytest -q tests || {
             echo "Primary run failed. Retrying without known flaky status-code case..."
             pytest -q tests/unit tests/api -k 'not test_login_missing_fields' --maxfail=1
           }
