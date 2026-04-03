@@ -19,7 +19,7 @@ async def test_create_task_unauthorized(client, create_base_users):
 
 
 @pytest.mark.asyncio
-async def test_create_task_invalid_data(authorized_client, create_base_users, auth_token):
+async def test_create_task_invalid_data(authorized_client, create_base_users):
     """Тестирование создания задачи с невалидными данными."""
     response = authorized_client.post("/tasks/", json={"title": "", "description": "This is a test task."})
     assert response.status_code == 422
@@ -28,7 +28,7 @@ async def test_create_task_invalid_data(authorized_client, create_base_users, au
 
 
 @pytest.mark.asyncio
-async def test_create_task_success(authorized_client, create_base_users, auth_token):
+async def test_create_task_success(authorized_client, create_base_users):
     """Тестирование успешного создания задачи."""
     response = authorized_client.post("/tasks/", json={"title": "Test Task", "description": "This is a test task."})
     assert response.status_code == 201
@@ -38,7 +38,7 @@ async def test_create_task_success(authorized_client, create_base_users, auth_to
 
 
 @pytest.mark.asyncio
-async def test_get_task_by_id_success(authorized_client, create_base_users, auth_token):
+async def test_get_task_by_id_success(authorized_client, create_base_users):
     """Проверяет получение задачи по ID."""
     create_response = authorized_client.post(
         "/tasks/",
@@ -57,7 +57,7 @@ async def test_get_task_by_id_success(authorized_client, create_base_users, auth
 
 
 @pytest.mark.asyncio
-async def test_update_task_success(authorized_client, create_base_users, auth_token):
+async def test_update_task_success(authorized_client, create_base_users):
     """Проверяет обновление задачи владельцем."""
     create_response = authorized_client.post(
         "/tasks/",
@@ -83,16 +83,15 @@ async def test_update_task_forbidden_for_non_owner(
     authorized_client,
     authorized_client2,
     create_base_users,
-    auth_token,
-    auth_token2,
 ):
     """Проверяет запрет обновления задачи чужим пользователем."""
     create_response = authorized_client.post(
         "/tasks/",
-        json={"title": "Owner task", "description": "Owned by user1"},
+        json={"title": "Update test", "description": "Task owned by user1 for update test"},
     )
-    assert create_response.status_code == 201
-    task_id = create_response.json()["id"]
+    assert create_response.status_code == 201, f"Failed to create task: {create_response.json()}"
+    task_id = create_response.json().get("id")
+    assert task_id is not None, f"No task_id in response: {create_response.json()}"
 
     response = authorized_client2.put(
         f"/tasks/{task_id}",
@@ -103,11 +102,11 @@ async def test_update_task_forbidden_for_non_owner(
 
 
 @pytest.mark.asyncio
-async def test_delete_task_success(authorized_client, create_base_users, auth_token):
+async def test_delete_task_success(authorized_client, create_base_users):
     """Проверяет удаление задачи владельцем."""
     create_response = authorized_client.post(
         "/tasks/",
-        json={"title": "To delete", "description": "To be removed"},
+        json={"title": "Delete test", "description": "Task to be removed by owner"},
     )
     assert create_response.status_code == 201
     task_id = create_response.json()["id"]
@@ -124,16 +123,15 @@ async def test_delete_task_forbidden_for_non_owner(
     authorized_client,
     authorized_client2,
     create_base_users,
-    auth_token,
-    auth_token2,
 ):
     """Проверяет запрет удаления задачи чужим пользователем."""
     create_response = authorized_client.post(
         "/tasks/",
-        json={"title": "Protected", "description": "Owned by user1"},
+        json={"title": "Protected task", "description": "Protected task owned by user1 for deletion test"},
     )
-    assert create_response.status_code == 201
-    task_id = create_response.json()["id"]
+    assert create_response.status_code == 201, f"Failed to create task: {create_response.json()}"
+    task_id = create_response.json().get("id")
+    assert task_id is not None, f"No task_id in response: {create_response.json()}"
 
     response = authorized_client2.delete(f"/tasks/{task_id}")
 

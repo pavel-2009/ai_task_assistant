@@ -61,6 +61,24 @@ def setup_database():
     yield
 
 
+@pytest.fixture(autouse=True)
+def cleanup_tasks_between_tests():
+    """Очищает задачи перед каждым тестом для изоляции."""
+    # ДО теста - очищаем задачи (но не пользователей)
+    from app.db import engine
+    from app.db_models import Task
+    from sqlalchemy import delete
+    
+    async def clear_tasks():
+        async with engine.begin() as conn:
+            await conn.execute(delete(Task))
+            await conn.commit()
+    
+    asyncio.run(clear_tasks())
+    
+    yield  # Выполняем тест
+
+
 @pytest.fixture
 def client():
     """Фикстура для создания тестового клиента."""
@@ -75,12 +93,47 @@ def client2():
     return TestClient(app)
 
 
-@pytest.fixture
-def auth_token(client, create_base_users):
-    """Фикстура для получения токена аутентификации."""
-    response = client.post("/auth/login", data={"username": "testuser", "password": "TestPass123!"})
+@pytest.fixture(scope="session")
+def create_base_users_session():
+    """Фикстура для создания базовых пользователей (один раз на сессию)."""
+    client = TestClient(app)
+    client.post("/auth/register", json={"username": "testuser", "password": "TestPass123!"})
+    client.post("/auth/register", json={"username": "testuser2", "password": "TestPass456!"})
+    return client
+
+
+@pytest.fixture(scope="session")
+def auth_token_session(create_base_users_session):
+    """Фикстура для получения токена первого пользователя (один раз на сессию)."""
+    response = create_base_users_session.post("/auth/login", data={"username": "testuser", "password": "TestPass123!"})
     assert response.status_code == 200
     return response.json().get("access_token")
+
+
+@pytest.fixture(scope="session")
+def auth_token2_session(create_base_users_session):
+    """Фикстура для получения токена второго пользователя (один раз на сессию)."""
+    response = create_base_users_session.post("/auth/login", data={"username": "testuser2", "password": "TestPass456!"})
+    assert response.status_code == 200
+    return response.json().get("access_token")
+
+
+@pytest.fixture
+def auth_token(auth_token_session):
+    """Фикстура для получения токена (переиспользует session токен)."""
+    return auth_token_session
+
+
+@pytest.fixture
+def auth_token1(auth_token_session):
+    """Фикстура для получения токена аутентификации (переиспользует session токен)."""
+    return auth_token_session
+
+
+@pytest.fixture
+def auth_token2(auth_token2_session):
+    """Фикстура для получения второго токена аутентификации (переиспользует session токен)."""
+    return auth_token2_session
 
 
 @pytest.fixture
@@ -91,7 +144,7 @@ def authorized_client(client, auth_token):
 
 
 @pytest.fixture
-def authorized_client2(client2, auth_token2, create_base_users):
+def authorized_client2(client2, auth_token2):
     """Фикстура для создания второго авторизованного клиента."""
     client2.headers.update({"Authorization": f"Bearer {auth_token2}"})
     return client2
@@ -129,27 +182,10 @@ def fresh_app_client():
     return TestClient(fresh_app)
 
 
-@pytest.fixture
-def auth_token1(client, create_base_users):
-    """Фикстура для получения токена аутентификации."""
-    response = client.post("/auth/login", data={"username": "testuser", "password": "TestPass123!"})
-    assert response.status_code == 200
-    return response.json().get("access_token")
-
-
-@pytest.fixture
-def auth_token2(client2, create_base_users):
-    """Фикстура для получения второго токена аутентификации."""
-    response = client2.post("/auth/login", data={"username": "testuser2", "password": "TestPass456!"})
-    assert response.status_code == 200, f"Login failed: {response.json()}"
-    return response.json().get("access_token")
-
-
 @pytest.fixture()
-def create_base_users(client):
-    """Фикстура для создания базовых пользователей."""
-    client.post("/auth/register", json={"username": "testuser", "password": "TestPass123!"})
-    client.post("/auth/register", json={"username": "testuser2", "password": "TestPass456!"})
+def create_base_users(create_base_users_session):
+    """Фикстура для совместимости (переиспользует session версию)."""
+    return create_base_users_session
 
 
 @pytest.fixture()

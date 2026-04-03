@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from app.celery_app import celery_app
+from app.core.config import config
 
 
 @pytest.fixture
@@ -24,14 +25,17 @@ def celery_eager_mode():
     """Включает eager-режим Celery для тестов submit/status без отдельного воркера."""
     original_always_eager = celery_app.conf.task_always_eager
     original_store_eager = celery_app.conf.task_store_eager_result
+    original_backend = celery_app.conf.result_backend
 
     celery_app.conf.task_always_eager = True
     celery_app.conf.task_store_eager_result = True
+    celery_app.conf.result_backend = config.CELERY_BROKER_URL
 
     yield
 
     celery_app.conf.task_always_eager = original_always_eager
     celery_app.conf.task_store_eager_result = original_store_eager
+    celery_app.conf.result_backend = original_backend
 
 
 @pytest.mark.asyncio
