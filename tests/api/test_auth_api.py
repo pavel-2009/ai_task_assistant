@@ -2,6 +2,11 @@
 
 import pytest
 import asyncio
+from datetime import datetime, timedelta, timezone
+
+import jwt
+
+from app.core import config
 
 
 # Test token expiration first (before rate limiting tests exhaust the limit)
@@ -31,6 +36,81 @@ async def test_login(client, create_base_users):
     response = client.post("/auth/login", data={"username": "testuser", "password": "TestPass123!"})
     assert response.status_code == 200
     assert "access_token" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_auth_full_cycle_with_jwt(fresh_app_client):
+    """Полный цикл: регистрация -> логин -> доступ к защищенному эндпоинту по JWT."""
+    register_response = fresh_app_client.post(
+        "/auth/register",
+        json={"username": "fullcycleuser", "password": "FullCycle123!"},
+    )
+    assert register_response.status_code == 201
+
+    login_response = fresh_app_client.post(
+        "/auth/login",
+        data={"username": "fullcycleuser", "password": "FullCycle123!"},
+    )
+    assert login_response.status_code == 200
+    token = login_response.json().get("access_token")
+    assert token is not None
+
+    task_response = fresh_app_client.post(
+        "/tasks/",
+        json={"title": "JWT smoke", "description": "Protected call"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert task_response.status_code == 201
+    task_payload = task_response.json()
+    assert task_payload["title"] == "JWT smoke"
+    assert task_payload["author_id"] == register_response.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_jwt_rejects_tampered_token(fresh_app_client):
+    """Проверка, что API отклоняет JWT c поврежденной подписью."""
+    fresh_app_client.post(
+        "/auth/register",
+        json={"username": "testuser", "password": "TestPass123!"},
+    )
+    login_response = fresh_app_client.post(
+        "/auth/login",
+        data={"username": "testuser", "password": "TestPass123!"},
+    )
+    assert login_response.status_code == 200
+    original_token = login_response.json()["access_token"]
+    tampered_token = f"{original_token}tampered"
+
+    response = fresh_app_client.post(
+        "/tasks/",
+        json={"title": "bad token", "description": "must fail"},
+        headers={"Authorization": f"Bearer {tampered_token}"},
+    )
+    assert response.status_code == 401
+    assert "signature" in response.json().get("detail", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_jwt_rejects_expired_token_without_sleep(fresh_app_client):
+    """Проверка, что API отклоняет просроченный JWT без ожидания в тесте."""
+    register_response = fresh_app_client.post(
+        "/auth/register",
+        json={"username": "expireduser", "password": "Expired123!"},
+    )
+    assert register_response.status_code == 201
+    expired_payload = {
+        "user_id": register_response.json()["id"],
+        "exp": datetime.now(timezone.utc) - timedelta(seconds=1),
+    }
+    expired_token = jwt.encode(expired_payload, config.SECRET_KEY, algorithm=config.JWT_ALGORITHM)
+
+    response = fresh_app_client.post(
+        "/tasks/",
+        json={"title": "expired token", "description": "must fail"},
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+    assert response.status_code == 401
+    assert "expired" in response.json().get("detail", "").lower()
 
     
 @pytest.mark.asyncio
