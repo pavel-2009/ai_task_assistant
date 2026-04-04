@@ -13,6 +13,27 @@ from app import app  # noqa
 from fastapi.testclient import TestClient
 
 
+import pytest
+import time
+import requests
+
+@pytest.fixture(scope="session", autouse=True)
+def wait_for_services():
+    """Ждем пока все сервисы запустятся."""
+    for _ in range(30):
+        try:
+            resp = requests.get("http://localhost:8000/ping", timeout=2)
+            if resp.status_code == 200:
+                data = resp.json()
+                # Ждем пока все модели загрузятся
+                if all(v.get("ready", False) for v in data["models"].values()):
+                    print("All services ready!")
+                    return
+        except:
+            pass
+        time.sleep(2)
+    print("Services not fully ready, but continuing tests...")
+
 # Технологии в описаниях задач для тестирования
 TECHNOLOGIES = [
     'Python', 'JavaScript', 'Java', 'C#', 'Ruby', 'Go', 'PHP', 'Swift', 'Kotlin', 'TypeScript'
