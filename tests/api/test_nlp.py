@@ -10,8 +10,8 @@ async def test_embedding_endpoint(authorized_client):
     response = authorized_client.post("/nlp/embedding", json="Привет, как дела?")
     assert response.status_code == 200
     data = response.json()
-    assert "embeddings" in data
-    assert len(data["embeddings"]) == 384  # Проверяем размер эмбеддинга
+    assert "embedding" in data
+    assert len(data["embedding"]) == 384  # Проверяем размер эмбеддинга
     
     # Тест для batch режима (список строк)
     response = authorized_client.post("/nlp/embedding", json=["Привет", "Как дела?"])
@@ -45,7 +45,7 @@ async def test_semantic_search_endpoint(authorized_client, create_all_base_tasks
 @pytest.mark.asyncio
 async def test_index_endpoint(authorized_client):
     """Тест для проверки эндпоинта индексации текста."""
-    payload = "Это тестовый текст для индексации."
+    payload = {"text": "Это тестовый текст для индексации."}
     response = authorized_client.post("/nlp/index", json=payload)
     assert response.status_code == 200
     data = response.json()

@@ -25,6 +25,7 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       CELERY_BROKER_URL: redis://localhost:6379/0
       CELERY_RESULT_BACKEND: redis://localhost:6379/0
+      CELERY_INIT_SERVICES_ON_STARTUP: "true"
       LLM_API_KEY: test-llm-key
 
     steps:
