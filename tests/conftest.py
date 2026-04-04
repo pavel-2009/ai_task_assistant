@@ -31,7 +31,7 @@ def wait_for_services():
                     return
         except:
             pass
-        time.sleep(150)
+        time.sleep(2)
     print("Services not fully ready, but continuing tests...")
 
 # Технологии в описаниях задач для тестирования
