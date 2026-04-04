@@ -150,4 +150,4 @@ async def _train_collaborative_filtering_model_async():
         
         redis_client = collaborative_filtering_recommender.redis_client
             
-        redis_client.set("collaborative_filtering_model", pickle.dumps((user_factors, task_factors, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks)))  # Сериализация модели в Redis
+        await redis_client.set("collaborative_filtering_model", pickle.dumps((user_factors, task_factors, user_to_idx, idx_to_task, unique_users, unique_tasks, popular_tasks)))  # Сериализация модели в Redis

@@ -47,5 +47,12 @@ jobs:
           celery -A app.celery_app worker --loglevel=info --pool=solo &
           sleep 15
           
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            curl -s http://localhost:8000/ping && break || sleep 3
+          done
+          sleep 10
+
       - name: Run tests
         run: pytest tests/ -v --tb=short
