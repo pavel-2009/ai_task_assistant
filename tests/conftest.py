@@ -117,21 +117,58 @@ def cleanup_tasks_between_tests():
     yield  # Выполняем тест
 
 
+@pytest.fixture(scope="session")
+def init_app_services():
+    """Инициализирует NLP/RAG сервисы и сохраняет их в app.state для TestClient."""
+    from app.services import (
+        get_embedding,
+        get_ner,
+        get_rag,
+        get_semantic_search,
+        init_services,
+    )
+
+    async def _init():
+        await init_services(use_onnx=False)
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    if loop.is_running():
+        temp_loop = asyncio.new_event_loop()
+        try:
+            temp_loop.run_until_complete(_init())
+        finally:
+            temp_loop.close()
+    else:
+        loop.run_until_complete(_init())
+
+    app.state.embedding_service = get_embedding()
+    app.state.semantic_search_service = get_semantic_search()
+    app.state.ner_service = get_ner()
+    app.state.rag_service = get_rag()
+
+    return app
+
+
 @pytest.fixture
-def client():
+def client(init_app_services):
     """Фикстура для создания тестового клиента."""
     return TestClient(app)
 
 
 @pytest.fixture
-def client2():
+def client2(init_app_services):
     """Фикстура для создания второго тестового клиента."""
     from app import app
     return TestClient(app)
 
 
 @pytest.fixture(scope="session")
-def create_base_users_session():
+def create_base_users_session(init_app_services):
     """Фикстура для создания базовых пользователей (один раз на сессию)."""
     client = TestClient(app)
     client.post("/auth/register", json={"username": "testuser", "password": "TestPass123!"})
@@ -196,7 +233,7 @@ def create_tasks_for_auth_client2(authorized_client2):
 
 
 @pytest.fixture
-def fresh_app_client():
+def fresh_app_client(init_app_services):
     """Фикстура для создания свежего клиента с новым экземпляром приложения."""
     import sys
     
