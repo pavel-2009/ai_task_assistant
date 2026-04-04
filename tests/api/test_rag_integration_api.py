@@ -53,30 +53,21 @@ async def initialized_services():
     """Только глобальная инициализация сервисов (как для Celery)."""
     await services_registry.ensure_services_initialized()
     
+    # Избегаем кросс-loop ошибок redis в TestClient/anyio сценариях:
+    # в интеграционных тестах этого модуля проверяем RAG-пайплайн, а не Redis-кэш.
+    semantic = services_registry.get_semantic_search()
+    rag = services_registry.get_rag()
+    vector_db = semantic.vector_db
+    semantic.redis_client = None
+    rag.redis_client = None
+    vector_db.redis_client = None
+
     yield {
         "embedding": services_registry.get_embedding(),
-        "semantic": services_registry.get_semantic_search(),
+        "semantic": semantic,
         "llm": services_registry.get_llm(),
-        "rag": services_registry.get_rag(),
+        "rag": rag,
     }
-    
-    # Закрываем все сервисы после тестов
-    llm_service = services_registry.get_llm()
-    if llm_service and hasattr(llm_service, 'close'):
-        await llm_service.close()
-    
-    # Закрываем Redis клиент, если он есть
-    redis_client = services_registry.get_redis()
-    
-    if hasattr(redis_client, 'aclose'):
-        await redis_client.aclose()
-    elif hasattr(redis_client, 'close'):
-        await redis_client.close()
-    
-    # Закрываем HTTP клиенты в других сервисах
-    embedding_service = services_registry.get_embedding()
-    if embedding_service and hasattr(embedding_service, 'close'):
-        await embedding_service.close()
 
 
 @pytest.fixture(scope="module")

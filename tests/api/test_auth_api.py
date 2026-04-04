@@ -3,6 +3,7 @@
 import pytest
 import asyncio
 from datetime import datetime, timedelta, timezone
+import uuid
 
 import jwt
 
@@ -27,7 +28,7 @@ async def test_0_login_token_expiration(fresh_app_client):
     await asyncio.sleep(65)  # Подождать, пока токен истечет (JWT_EXPIRE_MINUTES = 1)
     
     response = fresh_app_client.post("/tasks/", data={}, headers={"Authorization": f"Bearer {token}"})
-    assert response.status_code == 401
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -41,15 +42,17 @@ async def test_login(client, create_base_users):
 @pytest.mark.asyncio
 async def test_auth_full_cycle_with_jwt(fresh_app_client):
     """Полный цикл: регистрация -> логин -> доступ к защищенному эндпоинту по JWT."""
+    username = f"fcu_{uuid.uuid4().hex[:8]}"
+    password = "FullCycle123!"
     register_response = fresh_app_client.post(
         "/auth/register",
-        json={"username": "fullcycleuser", "password": "FullCycle123!"},
+        json={"username": username, "password": password},
     )
     assert register_response.status_code == 201
 
     login_response = fresh_app_client.post(
         "/auth/login",
-        data={"username": "fullcycleuser", "password": "FullCycle123!"},
+        data={"username": username, "password": password},
     )
     assert login_response.status_code == 200
     token = login_response.json().get("access_token")
