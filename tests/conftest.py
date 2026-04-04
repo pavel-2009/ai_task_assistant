@@ -17,6 +17,54 @@ import pytest
 import time
 import requests
 
+
+class _TestEmbeddingService:
+    """Легковесный сервис эмбеддингов для API-тестов."""
+
+    dimension = 384
+
+    def encode_one(self, _text: str):
+        return _ListWithToList([0.0] * self.dimension)
+
+    def encode_batch(self, texts: list[str]):
+        return _ListWithToList([[0.0] * self.dimension for _ in texts])
+
+
+class _ListWithToList(list):
+    """Совместимость с интерфейсом numpy.ndarray в роутере."""
+
+    def tolist(self):
+        return list(self)
+
+
+class _TestSemanticSearchService:
+    """Легковесный сервис семантического поиска для API-тестов."""
+
+    async def search(self, _query: str, session, top_k: int = 5):
+        return []
+
+    async def index(self, _text: str, session):
+        return "test-id"
+
+
+class _TestNerService:
+    """Легковесный NER сервис для API-тестов."""
+
+    is_ready = True
+
+    def tag_task(self, _text: str):
+        return {"technologies": [("python", 1.0)]}
+
+
+def _bind_nlp_services_to_state(test_app):
+    """Гарантирует привязку NLP-сервисов к app.state для тестов."""
+    if not hasattr(test_app.state, "embedding_service"):
+        test_app.state.embedding_service = _TestEmbeddingService()
+    if not hasattr(test_app.state, "semantic_search_service"):
+        test_app.state.semantic_search_service = _TestSemanticSearchService()
+    if not hasattr(test_app.state, "ner_service"):
+        test_app.state.ner_service = _TestNerService()
+
 @pytest.fixture(scope="session", autouse=True)
 def wait_for_services():
     """Ждем пока все сервисы запустятся."""
@@ -104,6 +152,7 @@ def cleanup_tasks_between_tests():
 @pytest.fixture
 def client():
     """Фикстура для создания тестового клиента."""
+    _bind_nlp_services_to_state(app)
     return TestClient(app)
 
 
@@ -112,6 +161,7 @@ def client():
 def client2():
     """Фикстура для создания второго тестового клиента."""
     from app import app
+    _bind_nlp_services_to_state(app)
     return TestClient(app)
 
 
