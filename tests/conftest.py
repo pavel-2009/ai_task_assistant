@@ -247,3 +247,11 @@ async def session(engine):
     
     async with async_session() as session:
         yield session
+        
+        
+# === Фикстуры для RAG API ===
+@pytest.fixture
+def reindex_tasks(authorized_client):
+    """Фикстура для переиндексации задач в RAG API перед тестами."""
+    response = authorized_client.post("/rag/reindex")
+    assert response.status_code == 200
