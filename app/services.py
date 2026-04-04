@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from pathlib import Path
 
 import redis.asyncio as redis
@@ -48,7 +47,7 @@ def _setup_services_file_logging() -> None:
     if _file_logging_configured:
         return
 
-    log_path = Path(os.getenv("SERVICES_LOG_PATH", "/app/logs/services.log"))
+    log_path = config.services_log_path
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
