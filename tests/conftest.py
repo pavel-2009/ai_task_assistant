@@ -3,6 +3,8 @@
 import pytest
 import os
 import asyncio
+import time
+import requests
 
 # Устанавливаем переменную окружения ПЕРЕД импортом конфига
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
@@ -12,27 +14,6 @@ os.environ.setdefault("JWT_EXPIRE_MINUTES", "30")
 from app import app  # noqa
 from fastapi.testclient import TestClient
 
-
-import pytest
-import time
-import requests
-
-@pytest.fixture(scope="session", autouse=True)
-def wait_for_services():
-    """Ждем пока все сервисы запустятся."""
-    for _ in range(30):
-        try:
-            resp = requests.get("http://localhost:8000/ping", timeout=2)
-            if resp.status_code == 200:
-                data = resp.json()
-                # Ждем пока все модели загрузятся
-                if all(v.get("ready", False) for v in data["models"].values()):
-                    print("All services ready!")
-                    return
-        except:
-            pass
-        time.sleep(2)
-    print("Services not fully ready, but continuing tests...")
 
 # Технологии в описаниях задач для тестирования
 TECHNOLOGIES = [
@@ -51,6 +32,41 @@ FAKE_TASKS_USER1 = [
 FAKE_TASKS_USER2 = [
     {"title": f"Task {i}", "description": f"Description for task {i}: {TECHNOLOGIES[i % len(TECHNOLOGIES)]}"} for i in range(11, 21)
 ]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def wait_for_services():
+    """Ждем пока все сервисы запустятся (RAG, LLM, Embedding)."""
+    max_attempts = 90
+    for attempt in range(max_attempts):
+        try:
+            # Пробуем подключиться к реальному серверу (для CI)
+            resp = requests.get("http://localhost:8000/ping", timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                models = data.get("models", {})
+                
+                # Проверяем готовность критических сервисов
+                rag_ready = models.get("rag", {}).get("ready", False)
+                llm_ready = models.get("llm", {}).get("ready", False)
+                embedding_ready = models.get("embedding", {}).get("ready", False)
+                ner_ready = models.get("ner", {}).get("ready", False)
+                
+                if rag_ready and llm_ready and embedding_ready and ner_ready:
+                    print(f"✅ All services ready! (attempt {attempt + 1})")
+                    return
+                
+                print(f"⏳ Waiting for services (attempt {attempt + 1}): "
+                      f"rag={rag_ready}, llm={llm_ready}, "
+                      f"embedding={embedding_ready}, ner={ner_ready}")
+        except requests.exceptions.ConnectionError:
+            print(f"⏳ Connection refused (attempt {attempt + 1}/{max_attempts})")
+        except Exception as e:
+            print(f"⚠️ Error checking services: {e}")
+        
+        time.sleep(2)
+    
+    print("❌ WARNING: Services not fully ready after timeout, but continuing tests...")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -105,7 +121,6 @@ def cleanup_tasks_between_tests():
 def client():
     """Фикстура для создания тестового клиента."""
     return TestClient(app)
-
 
 
 @pytest.fixture
@@ -274,5 +289,21 @@ async def session(engine):
 @pytest.fixture
 def reindex_tasks(authorized_client):
     """Фикстура для переиндексации задач в RAG API перед тестами."""
+    # Ждем готовности сервисов перед реиндексацией
+    max_retries = 30
+    for attempt in range(max_retries):
+        try:
+            health_response = authorized_client.get("/ping")
+            if health_response.status_code == 200:
+                data = health_response.json()
+                if data.get("models", {}).get("rag", {}).get("ready", False):
+                    break
+        except:
+            pass
+        time.sleep(2)
+    
     response = authorized_client.post("/rag/reindex")
     assert response.status_code == 200
+    
+    # Даем время на индексацию
+    time.sleep(3)
