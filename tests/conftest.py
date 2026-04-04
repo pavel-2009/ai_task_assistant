@@ -53,7 +53,8 @@ def unit_db_engine():
     return engine
 
 
-@pytest.fixture(scope="session")
+# Изменяем scope на function, чтобы избежать конфликта с event_loop
+@pytest.fixture(scope="function")
 async def unit_session_maker(unit_db_engine):
     async with unit_db_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -64,7 +65,7 @@ async def unit_session_maker(unit_db_engine):
     await unit_db_engine.dispose()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def unit_app(unit_session_maker) -> FastAPI:
     app = FastAPI()
     register_exception_handlers(app)
@@ -78,13 +79,12 @@ def unit_app(unit_session_maker) -> FastAPI:
     app.state.ner_service = DummyNerService()
     app.state.rag_service = DummyRagService()
 
-    # Создаём event loop для синхронной обёртки
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    # Синхронный генератор, который внутри использует асинхронный
+    # Создаём синхронный генератор для сессии
     def _override_session() -> Generator[AsyncSession, None, None]:
-        # Получаем сессию асинхронно
+        # Создаём новый event loop для каждого вызова
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
         async def _get_session():
             async with unit_session_maker() as session:
                 return session
@@ -94,6 +94,7 @@ def unit_app(unit_session_maker) -> FastAPI:
             yield session
         finally:
             loop.run_until_complete(session.close())
+            loop.close()
     
     app.dependency_overrides[get_async_session] = _override_session
     return app
@@ -109,14 +110,14 @@ def patch_celery_tasks(monkeypatch):
     monkeypatch.setattr("app.routers.rag.reindex_tasks_task", dummy)
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def unit_client_a(unit_app: FastAPI) -> Generator[TestClient, None, None]:
     with TestClient(unit_app) as client:
         _register_and_login(client, USER_A)
         yield client
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def unit_client_b(unit_app: FastAPI) -> Generator[TestClient, None, None]:
     with TestClient(unit_app) as client:
         _register_and_login(client, USER_B)
