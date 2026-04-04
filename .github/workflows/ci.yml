@@ -22,11 +22,11 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       CELERY_BROKER_URL: redis://localhost:6379/0
       CELERY_RESULT_BACKEND: redis://localhost:6379/0
-      CELERY_INIT_SERVICES_ON_STARTUP: "true"
+      CELERY_INIT_SERVICES_ON_STARTUP: "false"
       USE_ONNX: "false"
-      LLM_API_KEY: "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"
-      LLM_BASE_URL: "https://openrouter.ai/api/v1"
-      LLM_MODEL: "meta-llama/llama-3.2-3b-instruct:free"
+      LLM_API_KEY: "dummy-ci-key"
+      LLM_BASE_URL: "http://127.0.0.1:9999"
+      LLM_MODEL: "disabled-in-ci"
 
     steps:
       - uses: actions/checkout@v4
@@ -41,10 +41,11 @@ jobs:
           pip install -r prod_req.txt
           python -m spacy download en_core_web_sm
           
-      - name: Start services
+      - name: Start services (Redis -> Celery -> Uvicorn)
         run: |
-          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
           celery -A app.celery_app worker --loglevel=info --pool=solo &
+          sleep 15
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
           sleep 80
           
       - name: Run tests
