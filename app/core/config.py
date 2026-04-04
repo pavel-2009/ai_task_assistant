@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_PERIOD_SECONDS: int = 60
     METRICS_ENABLED: bool = True
     METRICS_PATH: str = "/metrics"
+    AVATARS_DIR: str = "avatars"
 
     LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
     LLM_MODEL: str = "meta-llama/llama-3.3-8b-instruct:free"

@@ -10,11 +10,13 @@ from celery.result import AsyncResult
 
 import os
 from pathlib import Path as PathlibPath
+import tempfile
 import uuid
 
 from app.db_models import Task, User
 from app.db import get_async_session
 from app.auth import get_current_user
+from app.core.config import config
 from app.utils.image_ops import validate_image, resize_image
 from app.ml.cv.tasks import detect_and_visualize_task, segment_image_task, predict_avatar_class
 from app.ml.nlp.tasks import update_recommendations_for_task
@@ -27,6 +29,17 @@ router = APIRouter(
     prefix="/tasks",
     tags=["avatars"]
 )
+
+def _ensure_avatars_dir() -> PathlibPath:
+    """Возвращает директорию для аватаров; при проблемах с правами использует /tmp."""
+    primary_dir = PathlibPath(config.AVATARS_DIR)
+    try:
+        primary_dir.mkdir(parents=True, exist_ok=True)
+        return primary_dir
+    except PermissionError:
+        fallback_dir = PathlibPath(tempfile.gettempdir()) / "ai_task_assistant" / "avatars"
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        return fallback_dir
 
 
 @router.post("/{task_id}/avatar", status_code=status.HTTP_200_OK, description="Загрузка аватара для задачи", response_model=FileUploadResponse)
@@ -71,23 +84,23 @@ async def upload_avatar(
 
     image = resize_image(image_bytes)
 
-    if not os.path.exists("avatars"):
-        os.makedirs("avatars")  
+    avatars_dir = _ensure_avatars_dir()
 
     filename = f"{task_id}_{uuid.uuid4().hex}.jpeg"
+    file_path = avatars_dir / filename
 
-    with open(f"avatars/{filename}", "wb") as f:
+    with open(file_path, "wb") as f:
         f.write(image)
 
     await session.execute(
-        update(Task).where(Task.id == task_id).values(avatar_file=f"avatars/{filename}")
+        update(Task).where(Task.id == task_id).values(avatar_file=str(file_path))
     )
     await session.commit()
     
     # После загрузки аватара обновляем рекомендации для задачи
     update_recommendations_for_task.delay(task_id=task_id)
 
-    return FileUploadResponse(filepath=f"avatars/{filename}", filename=filename)
+    return FileUploadResponse(filepath=str(file_path), filename=filename)
 
 
 @router.post("/{task_id}/predict/submit", status_code=status.HTTP_202_ACCEPTED, description="Создание задачи на предсказание класса аватарки задачи", response_model=CeleryTaskResponse)
