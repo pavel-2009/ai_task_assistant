@@ -20,7 +20,8 @@ import requests
 @pytest.fixture(scope="session", autouse=True)
 def wait_for_services():
     """Ждем пока все сервисы запустятся."""
-    for _ in range(30):
+    max_attempts = 60
+    for _ in range(max_attempts):
         try:
             resp = requests.get("http://localhost:8000/ping", timeout=2)
             if resp.status_code == 200:
@@ -31,7 +32,7 @@ def wait_for_services():
                     return
         except:
             pass
-        time.sleep(150)
+        time.sleep(3)
     print("Services not fully ready, but continuing tests...")
 
 # Технологии в описаниях задач для тестирования
