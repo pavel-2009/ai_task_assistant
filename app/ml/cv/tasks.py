@@ -14,8 +14,8 @@ from app.services import (
     get_drift_detector,
     get_redis
 )
+from app.core.paths import get_avatar_segments_dir
 
-from pathlib import Path
 from datetime import datetime
 
 import redis
@@ -80,7 +80,7 @@ def segment_image_task(task_id: int, image_path: str) -> bytes:
         
         segmented_image_bytes = segmentation_service.segment_image(image_bytes)
         
-        path_to_save = Path("/app/avatars/segments") / f"{task_id}_segmentation.png"
+        path_to_save = get_avatar_segments_dir() / f"{task_id}_segmentation.png"
         
         if not path_to_save.parent.exists():
             path_to_save.parent.mkdir(parents=True, exist_ok=True)
