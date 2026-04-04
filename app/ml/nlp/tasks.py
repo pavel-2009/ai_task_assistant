@@ -35,13 +35,15 @@ def process_task_tags_and_embedding(task_id: int, title: str, description: str):
 
 async def _process_task_tags_and_embedding_async(task_id: int, title: str, description: str):
     """Асинхронная реализация обработки тегов и эмбеддингов."""
-    
-    ner_service = get_ner()
+    try:
+        ner_service = get_ner()
+        semantic_search_service = get_semantic_search()
+    except RuntimeError as e:
+        logger.warning("NLP services are not initialized: %s", e)
+        return
     
     text = f"{title}\n{description}"
     tags_result = ner_service.tag_task(text)
-
-    semantic_search_service = get_semantic_search()
     
     async with async_session() as session:
         await session.execute(
@@ -101,6 +103,12 @@ def update_recommendations_for_task(task_id: int):
 
 async def _update_recommendations_for_task_async(task_id: int):
     """Асинхронная реализация обновления рекомендаций."""
+    try:
+        embedding_service: EmbeddingService = get_embedding()
+        rs_vector_db: RecSysVectorDB = get_recsys_vector_db()
+    except RuntimeError as e:
+        logger.warning("Recommendation services are not initialized: %s", e)
+        return
     
     async with async_session() as session:
         # Получить задачу из БД
@@ -109,8 +117,6 @@ async def _update_recommendations_for_task_async(task_id: int):
         
         if not task:
             return
-        
-        embedding_service: EmbeddingService = get_embedding()
         
         text = f"{task.title}\n{task.description}"
         avatar_file = task.avatar_file  # Путь к файлу аватара, если он есть
@@ -133,8 +139,6 @@ async def _update_recommendations_for_task_async(task_id: int):
         embedding = embedding / np.linalg.norm(embedding)    
         
         # Добавить в vector_db (если нет) или обновить (если есть)
-        rs_vector_db: RecSysVectorDB = get_recsys_vector_db()
-        
         if rs_vector_db.ids_to_idx.get(str(task_id)) is not None:
             await rs_vector_db.update(item_id=str(task_id), embedding=embedding)
             

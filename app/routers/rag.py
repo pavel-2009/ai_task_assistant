@@ -29,14 +29,6 @@ async def reindex_tasks_endpoint(
     """
     Ручной триггер для переиндексации задач в RAG API.
     """
-    rag_service = getattr(request.app.state, "rag_service", None)
-
-    if not rag_service:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Ошибка при загрузке RAG-модели"
-        )
-
     try:
         reindex_tasks_task.delay()  # Запускаем переиндексацию в фоновом режиме
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Переиндексация задач запущена"})

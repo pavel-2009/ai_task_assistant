@@ -74,11 +74,20 @@ def _get_ner_service(request: Request) -> NerService:
     return getattr(request.app.state, "ner_service", None)
 
 
+def _require_service(service: object, service_name: str) -> object:
+    if service is None:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Сервис '{service_name}' не инициализирован",
+        )
+    return service
+
+
 @router.post("/embedding", description="Получить эмбеддинг для текста", response_model=EmbeddingResponse)
 async def get_embedding(request: Request, text: str | list[str] = Body(...)):
     """Получить эмбеддинг для текста."""
     normalized_payload = _normalize_texts(text)
-    embedding_service = _get_embedding_service(request)
+    embedding_service = _require_service(_get_embedding_service(request), "embedding")
 
     try:
         if isinstance(normalized_payload, str):
@@ -110,7 +119,10 @@ async def search(
     if top_k <= 0 or top_k > 20:
         raise HTTPException(status_code=400, detail="top_k должен быть в диапазоне от 1 до 20")
 
-    semantic_search_service = _get_semantic_search_service(request)
+    semantic_search_service = _require_service(
+        _get_semantic_search_service(request),
+        "semantic_search",
+    )
 
     try:
         results = await semantic_search_service.search(normalized_query, session=session, top_k=top_k)
@@ -136,7 +148,10 @@ async def index(
 ):
     """Индексировать текст, добавляя его эмбеддинг в базу данных."""
     normalized_text = _normalize_text(text)
-    semantic_search_service = _get_semantic_search_service(request)
+    semantic_search_service = _require_service(
+        _get_semantic_search_service(request),
+        "semantic_search",
+    )
 
     try:
         await semantic_search_service.index(normalized_text, session=session)
@@ -151,13 +166,7 @@ async def index(
 @router.post("/tag-task", description="Получить теги для текста задачи", response_model=NLPTagTaskResponse)
 async def tag_task(request: Request, text: str = Body(...)):
     """Получить теги для текста задачи."""
-    ner_service = _get_ner_service(request)
-
-    if ner_service is None:
-        raise HTTPException(
-            status_code=503,
-            detail="NerService не инициализирован. Проверьте логи приложения",
-        )
+    ner_service = _require_service(_get_ner_service(request), "ner")
 
     normalized_text = _normalize_text(text)
 
