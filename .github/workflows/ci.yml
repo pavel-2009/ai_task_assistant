@@ -68,6 +68,10 @@ jobs:
           celery -A app.celery_app.celery_app worker --loglevel=info --pool=solo --detach --pidfile=/tmp/celery-ci.pid --logfile=/tmp/celery-ci.log
           sleep 5
           celery -A app.celery_app.celery_app inspect ping
+        env:
+          CELERY_BROKER_URL: redis://localhost:6379/0
+          CELERY_RESULT_BACKEND: redis://localhost:6379/0
+          CELERY_INIT_SERVICES_ON_STARTUP: "true"
 
       - name: Run tests (tolerant to known 400/422 variance)
         run: |
