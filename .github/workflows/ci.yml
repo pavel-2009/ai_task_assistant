@@ -1,3 +1,4 @@
+# .github/workflows/ci.yml
 name: CI
 
 on:
@@ -13,80 +14,38 @@ jobs:
         image: redis:7-alpine
         ports:
           - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
 
     env:
       SECRET_KEY: test-secret-key
-      DATABASE_URL: sqlite+aiosqlite:///./test_ci.db
+      DATABASE_URL: sqlite+aiosqlite:///./test.db
       REDIS_URL: redis://localhost:6379/0
       CELERY_BROKER_URL: redis://localhost:6379/0
       CELERY_RESULT_BACKEND: redis://localhost:6379/0
       CELERY_INIT_SERVICES_ON_STARTUP: "true"
-      LLM_API_KEY: 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
+      USE_ONNX: "false"
+      LLM_API_KEY: "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"
+      LLM_BASE_URL: "https://openrouter.ai/api/v1"
+      LLM_MODEL: "meta-llama/llama-3.2-3b-instruct:free"
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
-
+          
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r prod_req.txt
-
-      - name: Wait for Redis
+          python -m spacy download en_core_web_sm
+          
+      - name: Start services
         run: |
-          python - <<'PY'
-          import socket
-          import time
-
-          deadline = time.time() + 30
-          while time.time() < deadline:
-            try:
-              with socket.create_connection(("localhost", 6379), timeout=1) as sock:
-                sock.sendall(b"*1\r\n$4\r\nPING\r\n")
-                if b"PONG" in sock.recv(32):
-                  print("Redis is ready")
-                  raise SystemExit(0)
-            except OSError:
-              pass
-            time.sleep(1)
-
-          raise SystemExit("Redis did not become ready in time")
-          PY
-
-      - name: Start Celery worker
-        run: |
-          celery -A app.celery_app.celery_app worker --loglevel=info --pool=solo --detach --pidfile=/tmp/celery-ci.pid --logfile=/tmp/celery-ci.log
-          sleep 5
-          celery -A app.celery_app.celery_app inspect ping
-        env:
-          CELERY_BROKER_URL: redis://localhost:6379/0
-          CELERY_RESULT_BACKEND: redis://localhost:6379/0
-          CELERY_INIT_SERVICES_ON_STARTUP: "true"
-
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          celery -A app.celery_app worker --loglevel=info --pool=solo &
+          sleep 15
+          
       - name: Run tests
-        run: |
-          set -euo pipefail
-          pytest -q tests --cov=. || {
-            echo "Primary run failed. Retrying without known flaky status-code case..."
-            pytest -q tests/unit tests/api -k 'not test_login_missing_fields' --maxfail=1
-          }
-        env:
-          LLM_API_KEY: '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'
-
-      - name: Stop Celery worker
-        if: always()
-        run: |
-          if [ -f /tmp/celery-ci.pid ]; then
-            kill "$(cat /tmp/celery-ci.pid)" || true
-          fi
+        run: pytest tests/ -v --tb=short
