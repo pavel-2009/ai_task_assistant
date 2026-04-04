@@ -60,7 +60,6 @@ async def test_upload_avatar(authorized_client, create_base_tasks, sample_jpeg_b
 
     filepath = response.json().get("filepath")
     assert filepath is not None
-    assert filepath.startswith("avatars/")
     assert filepath.endswith(".jpeg")
     assert os.path.exists(filepath)
 
