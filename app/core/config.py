@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 1
     JWT_ALGORITHM: str = "HS256"
     USE_ONNX: bool = False
+    CELERY_INIT_SERVICES_ON_STARTUP: bool = False
 
     MAX_IMAGE_SIZE_PX: int = 1024
     DEFAULT_TOP_K: int = 5

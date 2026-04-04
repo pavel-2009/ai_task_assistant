@@ -40,28 +40,6 @@ logger = logging.getLogger(__name__)
 _services: dict = {}
 _initialized = False
 _init_lock = asyncio.Lock()
-_file_logging_configured = False
-
-
-def _setup_services_file_logging() -> None:
-    global _file_logging_configured
-    if _file_logging_configured:
-        return
-
-    log_path = Path(os.getenv("SERVICES_LOG_PATH", "/app/logs/services.log"))
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(
-        logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-    )
-    logger.addHandler(file_handler)
-    logger.setLevel(logging.INFO)
-    logger.propagate = True
-    _file_logging_configured = True
-
-
 def default_inference_checkpoint_path() -> str:
     return str(Path(__file__).resolve().parent.parent / "checkpoints" / "model.pth")
 
@@ -78,8 +56,6 @@ async def init_services(
 ) -> None:
     """Инициализирует все сервисы один раз при старте приложения."""
     global _initialized
-    _setup_services_file_logging()
-
     if _initialized:
         return
 
