@@ -3,14 +3,15 @@
 """
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_async_session
 from ..error_handlers import AppError
 from ..schemas import AskRequest, AskResponse
-from app.ml.nlp.tasks import reindex_tasks
+from app.ml.nlp.tasks import reindex_tasks as reindex_tasks_task
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ router = APIRouter(
 
 
 @router.post("/reindex", description="Переиндексация задач в RAG API")
-async def reindex_tasks(
+async def reindex_tasks_endpoint(
     request: Request,
     session: AsyncSession = Depends(get_async_session)
 ):
@@ -37,8 +38,8 @@ async def reindex_tasks(
         )
 
     try:
-        reindex_tasks.delay()  # Запускаем переиндексацию в фоновом режиме
-        return Response(status_code=status.HTTP_200_OK, content={"message": "Переиндексация задач запущена"})
+        reindex_tasks_task.delay()  # Запускаем переиндексацию в фоновом режиме
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Переиндексация задач запущена"})
     except Exception as exc:
         logger.error(f"Ошибка при переиндексации RAG: {exc}", exc_info=True)
         raise AppError("Ошибка при переиндексации RAG", status_code=500) from exc
