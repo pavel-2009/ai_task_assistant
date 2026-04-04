@@ -6,6 +6,7 @@ import asyncio
 
 # Устанавливаем переменную окружения ПЕРЕД импортом конфига
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("JWT_EXPIRE_MINUTES", "30")
 
 # Импортируем app СРАЗУ для инициализации engine с тестовой БД
 from app import app  # noqa
