@@ -76,6 +76,8 @@ jobs:
             echo "Primary run failed. Retrying without known flaky status-code case..."
             pytest -q tests/unit tests/api -k 'not test_login_missing_fields' --maxfail=1
           }
+        env:
+          LLM_API_KEY: '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'
 
       - name: Stop Celery worker
         if: always()

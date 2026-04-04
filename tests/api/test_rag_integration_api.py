@@ -11,6 +11,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
+import asyncio
+
 import app.services as services_registry
 from app.db import async_session
 from app.db_models import Task, Text, User
@@ -20,6 +22,11 @@ from app.routers import auth as auth_router
 from app.routers import nlp as nlp_router
 from app.routers import rag as rag_router
 from app.routers import tasks as tasks_router
+
+
+async def _reindex_tasks_async():
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, reindex_tasks)
 
 
 TECH_TASKS = [
@@ -45,12 +52,31 @@ TECH_TASKS = [
 async def initialized_services():
     """Только глобальная инициализация сервисов (как для Celery)."""
     await services_registry.ensure_services_initialized()
-    return {
+    
+    yield {
         "embedding": services_registry.get_embedding(),
         "semantic": services_registry.get_semantic_search(),
         "llm": services_registry.get_llm(),
         "rag": services_registry.get_rag(),
     }
+    
+    # Закрываем все сервисы после тестов
+    llm_service = services_registry.get_llm()
+    if llm_service and hasattr(llm_service, 'close'):
+        await llm_service.close()
+    
+    # Закрываем Redis клиент, если он есть
+    redis_client = services_registry.get_redis()
+    
+    if hasattr(redis_client, 'aclose'):
+        await redis_client.aclose()
+    elif hasattr(redis_client, 'close'):
+        await redis_client.close()
+    
+    # Закрываем HTTP клиенты в других сервисах
+    embedding_service = services_registry.get_embedding()
+    if embedding_service and hasattr(embedding_service, 'close'):
+        await embedding_service.close()
 
 
 @pytest.fixture(scope="module")
@@ -111,7 +137,7 @@ async def rag_stage_data(tasks_stage_data, initialized_services):
     vector_db.index = faiss.IndexFlatIP(vector_db.dim)
     vector_db.ids.clear()
     vector_db.ids_to_idx.clear()
-    reindex_tasks()
+    await _reindex_tasks_async()
 
 
 @pytest.mark.asyncio

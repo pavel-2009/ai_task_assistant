@@ -26,6 +26,17 @@ class LLMService:
         self.api_key = config.LLM_API_KEY
         self.timeout_seconds = config.LLM_TIMEOUT_SECONDS
         self.metrics.record_load_time(time.perf_counter() - load_start)
+        self.client: httpx.AsyncClient | None = None
+        self._closed = False
+        
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Асинхронное получение клиента с ленивой инициализацией."""
+        if self._closed:
+            raise RuntimeError("LLMService client is closed")
+        
+        if self.client is None:
+            self.client = httpx.AsyncClient(timeout=self.timeout_seconds)
+        return self.client
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -42,6 +53,7 @@ class LLMService:
 
     async def generate(self, prompt: str, system: str | None = None) -> str:
         """Запрос к LLM модели и получение полного ответа."""
+        client = None
         try:
             with self.metrics.time_inference():
                 if not self.api_key:
@@ -54,17 +66,18 @@ class LLMService:
                     "messages": self._build_messages(prompt=prompt, system=system),
                 }
 
-                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                    response = await client.post(
-                        f"{self.url}/chat/completions",
-                        headers=self._headers(),
-                        json=payload,
-                    )
-                    response.raise_for_status()
+                client = await self._get_client()
+                response = await client.post(
+                    f"{self.url}/chat/completions",
+                    headers=self._headers(),
+                    json=payload,
+                )
+                response.raise_for_status()
 
                 data = response.json()
                 self.metrics.record_success()
                 return data["choices"][0]["message"]["content"]
+                
         except Exception as exc:
             self.metrics.record_error(type(exc).__name__)
             logger.error("Ошибка при генерации ответа: %s", exc, exc_info=True)
@@ -72,7 +85,7 @@ class LLMService:
 
     async def generate_stream(self, prompt: str, system: str | None = None) -> AsyncGenerator[str, None]:
         """Потоковая генерация (async generator): возвращает токены по мере генерации."""
-
+        
         if not self.api_key:
             logger.error("LLM API key is not configured")
             return
@@ -83,53 +96,53 @@ class LLMService:
             "stream": True,
         }
 
+        client = None
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                async with client.stream(
-                    "POST",
-                    f"{self.url}/chat/completions",
-                    headers=self._headers(),
-                    json=payload,
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if not line or not line.startswith("data: "):
-                            continue
+            client = await self._get_client()
+            async with client.stream(
+                "POST",
+                f"{self.url}/chat/completions",
+                headers=self._headers(),
+                json=payload,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
 
-                        chunk = line[6:].strip()
-                        if chunk == "[DONE]":
-                            break
+                    chunk = line[6:].strip()
+                    if chunk == "[DONE]":
+                        break
 
-                        try:
-                            data = json.loads(chunk)
-                        except json.JSONDecodeError:
-                            continue
+                    try:
+                        data = json.loads(chunk)
+                    except json.JSONDecodeError:
+                        continue
 
-                        delta = data.get("choices", [{}])[0].get("delta", {})
-                        content = delta.get("content")
-                        if content:
-                            yield content
+                    delta = data.get("choices", [{}])[0].get("delta", {})
+                    content = delta.get("content")
+                    if content:
+                        yield content
+                        
         except Exception as exc:
             logger.error("Ошибка при потоковой генерации: %s", exc, exc_info=True)
 
     async def is_available(self) -> bool:
         """Проверяет доступность удаленного LLM API."""
-
         if not self.api_key:
             return False
 
         try:
+            # Создаем отдельный клиент для проверки, чтобы не влиять на основной
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                 response = await client.get(f"{self.url}/models", headers=self._headers())
                 response.raise_for_status()
-
             return True
         except Exception:
             return False
 
     async def warmup(self) -> None:
         """Проверяет доступность удаленной модели при старте."""
-
         if not self.api_key:
             logger.warning("Skip LLM warmup: LLM_API_KEY is not set")
             return
@@ -140,3 +153,13 @@ class LLMService:
 
         logger.error("LLM warmup failed: API is unavailable (model='%s')", self.model)
         raise RuntimeError("LLM API is unavailable")
+    
+    async def close(self) -> None:
+        """Закрывает HTTP клиент."""
+        if self._closed:
+            return
+            
+        self._closed = True
+        if self.client is not None:
+            await self.client.aclose()
+            self.client = None
