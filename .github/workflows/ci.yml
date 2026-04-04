@@ -73,7 +73,7 @@ jobs:
           CELERY_RESULT_BACKEND: redis://localhost:6379/0
           CELERY_INIT_SERVICES_ON_STARTUP: "true"
 
-      - name: Run tests (tolerant to known 400/422 variance)
+      - name: Run tests
         run: |
           set -euo pipefail
           pytest -q tests --cov=. || {

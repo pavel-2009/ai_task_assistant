@@ -44,9 +44,6 @@ def default_inference_checkpoint_path() -> str:
     return str(Path(__file__).resolve().parent.parent / "checkpoints" / "model.pth")
 
 
-def default_inference_idx_to_class() -> dict[int, str]:
-    return {0: "cat", 1: "dog", 2: "house"}
-
 
 async def init_services(
     use_onnx: bool = False,
@@ -187,7 +184,7 @@ async def ensure_services_initialized(
             use_onnx=use_onnx,
             redis_client=redis_client,
             inference_checkpoint_path=inference_checkpoint_path or default_inference_checkpoint_path(),
-            inference_idx_to_class=inference_idx_to_class or default_inference_idx_to_class(),
+            inference_idx_to_class=inference_idx_to_class,
         )
 
 

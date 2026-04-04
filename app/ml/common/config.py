@@ -4,7 +4,6 @@
 
 from pydantic_settings import BaseSettings
 from pathlib import Path
-import torchvision
 
 
 class MLConfig(BaseSettings):
@@ -17,7 +16,7 @@ class MLConfig(BaseSettings):
     img_size: int = 224
     batch_size: int = 16
     num_workers: int = 2
-    num_classes: int = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.IMAGENET1K_V1).fc.out_features
+    num_classes: int = 1000
     mean: list[float] = [0.485, 0.456, 0.406]
     std: list[float] = [0.229, 0.224, 0.225]
     learning_rate: float = 0.001
