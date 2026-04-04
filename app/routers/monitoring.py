@@ -2,7 +2,11 @@
 Роутер для мониторинга моделей машинного обучения.
 """
 
-from fastapi import APIRouter, HTTPException, status
+import redis.asyncio as redis
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.ml.monitoring.drift_detector import DriftDetector
+from app.services import get_drift_detector, get_redis
 from app.schemas import DriftReportResponse, DriftHistoryResponse
 
 
@@ -13,12 +17,10 @@ router = APIRouter(
 
 
 @router.get("/drift/report", response_model=DriftReportResponse)
-async def get_drift_report(request):
+async def get_drift_report(drift_detector: DriftDetector = Depends(get_drift_detector)):
     """
     Возвращает текущий статус из DriftDetector.get_status()
     """
-    drift_detector = getattr(request.app.state, "drift_detector", None)
-    
     if not drift_detector:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -33,12 +35,10 @@ async def get_drift_report(request):
 
 
 @router.get("/drift/history", response_model=DriftHistoryResponse)
-async def get_drift_history(request):
+async def get_drift_history(redis_client: redis.Redis | None = Depends(get_redis)):
     """
     Возвращает историю дрейфов из Redis (ключи drift_alert:*)
     """
-    redis_client = getattr(request.app.state, "redis_client", None)
-    
     if not redis_client:
         return DriftHistoryResponse(history={}, count=0, status="redis_unavailable")
     

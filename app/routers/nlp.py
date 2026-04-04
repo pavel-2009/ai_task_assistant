@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import config
@@ -18,6 +18,11 @@ from ..ml.nlp.ner_service import NerService
 from ..ml.nlp.semantic_search_service import SemanticSearchService
 from ..schemas import (
     EmbeddingResponse, SearchResults, IndexResponse, NLPTagTaskResponse
+)
+from ..services import (
+    get_embedding as get_embedding_service_dependency,
+    get_semantic_search as get_semantic_search_service_dependency,
+    get_ner as get_ner_service_dependency,
 )
 
 router = APIRouter(prefix="/nlp", tags=["NLP"])
@@ -62,23 +67,13 @@ def _normalize_texts(payload: str | list[str]) -> str | list[str]:
     )
 
 
-def _get_embedding_service(request: Request) -> EmbeddingService:
-    return getattr(request.app.state, "embedding_service", None)
-
-
-def _get_semantic_search_service(request: Request) -> SemanticSearchService:
-    return getattr(request.app.state, "semantic_search_service", None)
-
-
-def _get_ner_service(request: Request) -> NerService:
-    return getattr(request.app.state, "ner_service", None)
-
-
 @router.post("/embedding", description="Получить эмбеддинг для текста", response_model=EmbeddingResponse)
-async def get_embedding(request: Request, text: str | list[str] = Body(...)):
+async def get_embedding(
+    text: str | list[str] = Body(...),
+    embedding_service: EmbeddingService = Depends(get_embedding_service_dependency),
+):
     """Получить эмбеддинг для текста."""
     normalized_payload = _normalize_texts(text)
-    embedding_service = _get_embedding_service(request)
 
     try:
         if isinstance(normalized_payload, str):
@@ -100,17 +95,15 @@ async def get_embedding(request: Request, text: str | list[str] = Body(...)):
     response_model=SearchResults
 )
 async def search(
-    request: Request,
     query: str = Body(..., embed=True, description="Текст запроса для поиска"),
     top_k: int = Body(config.DEFAULT_TOP_K, embed=True, description="Количество результатов для возврата"),
+    semantic_search_service: SemanticSearchService = Depends(get_semantic_search_service_dependency),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Поиск документов, наиболее похожих на запрос."""
     normalized_query = _normalize_text(query)
     if top_k <= 0 or top_k > 20:
         raise HTTPException(status_code=400, detail="top_k должен быть в диапазоне от 1 до 20")
-
-    semantic_search_service = _get_semantic_search_service(request)
 
     try:
         results = await semantic_search_service.search(normalized_query, session=session, top_k=top_k)
@@ -130,14 +123,12 @@ async def search(
     response_model=IndexResponse
 )
 async def index(
-    request: Request,
     text: str = Body(..., embed=True, description=""),
+    semantic_search_service: SemanticSearchService = Depends(get_semantic_search_service_dependency),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Индексировать текст, добавляя его эмбеддинг в базу данных."""
     normalized_text = _normalize_text(text)
-    semantic_search_service = _get_semantic_search_service(request)
-
     try:
         await semantic_search_service.index(normalized_text, session=session)
     except ValueError as exc:
@@ -149,10 +140,11 @@ async def index(
 
 
 @router.post("/tag-task", description="Получить теги для текста задачи", response_model=NLPTagTaskResponse)
-async def tag_task(request: Request, text: str = Body(...)):
+async def tag_task(
+    text: str = Body(...),
+    ner_service: NerService = Depends(get_ner_service_dependency),
+):
     """Получить теги для текста задачи."""
-    ner_service = _get_ner_service(request)
-
     if ner_service is None:
         raise HTTPException(
             status_code=503,

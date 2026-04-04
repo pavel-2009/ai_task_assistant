@@ -5,7 +5,6 @@ from fastapi import APIRouter, HTTPException, status, Query, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import services
 from app.core import config
 from app.db_models import Task, User
 from app.schemas import Recommendation, RecommendationGet
@@ -13,6 +12,10 @@ from app.db import get_async_session
 from app.auth import get_current_user
 from app.ml.recsys.content_based import ContentBasedRecommender
 from app.ml.recsys.collaborative_filtering import CollaborativeFilteringRecommender
+from app.services import (
+    get_content_based_recommender,
+    get_collaborative_filtering_recommender,
+)
 
 
 router = APIRouter(
@@ -27,7 +30,8 @@ async def get_recommendations(
     current_user: User = Depends(get_current_user),
     top_k: int = Query(config.DEFAULT_TOP_K, ge=1, le=20),
     author_id: int = Query(None, description="ID автора задачи для фильтрации рекомендаций"),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
+    content_based_recommender: ContentBasedRecommender = Depends(get_content_based_recommender),
 ) -> RecommendationGet:
     """Получение рекомендаций для задачи на основе ее ID."""
     
@@ -43,8 +47,6 @@ async def get_recommendations(
             detail="Задача не найдена"
         )
         
-    content_based_recommender: ContentBasedRecommender = services.get_service("content_based_recommender")
-    
     recommendations = await content_based_recommender.recommend(task.id, session, top_k=top_k, author_id=author_id or current_user.id)
     
     return RecommendationGet(
@@ -63,7 +65,8 @@ async def get_recommendations(
 async def get_cf_recommendations(
     current_user: User = Depends(get_current_user),
     top_k: int = Query(config.DEFAULT_TOP_K, ge=1, le=20),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
+    collaborative_filtering_recommender: CollaborativeFilteringRecommender = Depends(get_collaborative_filtering_recommender),
 ) -> RecommendationGet:
     """Получение рекомендаций на основе коллаборативной фильтрации для текущего пользователя."""
     
@@ -72,8 +75,6 @@ async def get_cf_recommendations(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Пользователь не аутентифицирован"
         )
-    
-    collaborative_filtering_recommender: CollaborativeFilteringRecommender = services.get_service("collaborative_filtering_recommender")
     
     recommendations = await collaborative_filtering_recommender.recommend(current_user.id, top_k=top_k)
     

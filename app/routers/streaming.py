@@ -2,12 +2,14 @@
 Роутер для realtime стриминга видео с одновременной обработкой видео с YOLOService
 """
 
-from fastapi import APIRouter, WebSocket
+from fastapi import APIRouter, Depends, WebSocket
 from fastapi.websockets import WebSocketDisconnect
 
 import asyncio
 import logging
 
+from app.ml.cv.detection.yolo_onnx_service import YoloONNXService
+from app.ml.cv.detection.yolo_service import YoloService
 from app.services import get_yolo
 
 
@@ -20,11 +22,14 @@ logger = logging.getLogger(__name__)
 
 
 @router.websocket("/detect", name="streaming:detect")
-async def detect(websocket: WebSocket, target_fps: int = 30):
+async def detect(
+    websocket: WebSocket,
+    target_fps: int = 30,
+    yolo_service: YoloService | YoloONNXService = Depends(get_yolo),
+):
     await websocket.accept()
     min_frame_interval = 1.0 / target_fps
-    
-    yolo_service = get_yolo()
+
     frame_queue = asyncio.Queue(maxsize=2)  # Уменьшаем размер очереди
     last_process_time = 0
     close_event = asyncio.Event()  # Сигнал о закрытии соединения
