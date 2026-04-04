@@ -27,9 +27,7 @@ async def test_semantic_search_endpoint(authorized_client, create_all_base_tasks
     """Тест для проверки эндпоинта семантического поиска."""
     # Сначала нужно проиндексировать задачи
     response = authorized_client.post("/rag/reindex")
-    # Может вернуть 500 если RAG не инициализирован, пропускаем
-    if response.status_code == 500:
-        pytest.skip("RAG service not initialized")
+    assert response.status_code == 200
     
     payload = {
         "query": "задача",
