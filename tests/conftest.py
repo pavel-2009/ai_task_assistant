@@ -83,7 +83,8 @@ def cleanup_tasks_between_tests():
 @pytest.fixture
 def client():
     """Фикстура для создания тестового клиента."""
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 
@@ -91,22 +92,23 @@ def client():
 def client2():
     """Фикстура для создания второго тестового клиента."""
     from app import app
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture(scope="session")
 def create_base_users_session():
     """Фикстура для создания базовых пользователей (один раз на сессию)."""
-    client = TestClient(app)
-    client.post("/auth/register", json={"username": "testuser", "password": "TestPass123!"})
-    client.post("/auth/register", json={"username": "testuser2", "password": "TestPass456!"})
-    return client
+    with TestClient(app) as client:
+        client.post("/auth/register", json={"username": "testuser", "password": "TestPass123!"})
+        client.post("/auth/register", json={"username": "testuser2", "password": "TestPass456!"})
 
 
 @pytest.fixture(scope="session")
 def auth_token_session(create_base_users_session):
     """Фикстура для получения токена первого пользователя (один раз на сессию)."""
-    response = create_base_users_session.post("/auth/login", data={"username": "testuser", "password": "TestPass123!"})
+    with TestClient(app) as client:
+        response = client.post("/auth/login", data={"username": "testuser", "password": "TestPass123!"})
     assert response.status_code == 200
     return response.json().get("access_token")
 
@@ -114,7 +116,8 @@ def auth_token_session(create_base_users_session):
 @pytest.fixture(scope="session")
 def auth_token2_session(create_base_users_session):
     """Фикстура для получения токена второго пользователя (один раз на сессию)."""
-    response = create_base_users_session.post("/auth/login", data={"username": "testuser2", "password": "TestPass456!"})
+    with TestClient(app) as client:
+        response = client.post("/auth/login", data={"username": "testuser2", "password": "TestPass456!"})
     assert response.status_code == 200
     return response.json().get("access_token")
 
@@ -180,7 +183,8 @@ def fresh_app_client():
     
     asyncio.run(create_tables())
     
-    return TestClient(fresh_app)
+    with TestClient(fresh_app) as test_client:
+        yield test_client
 
 
 @pytest.fixture()
