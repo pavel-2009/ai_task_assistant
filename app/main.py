@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request, Response, status
 
 from app.core import config
 from app.core.metrics import setup_metrics
-from app.db import close_redis, engine
+from app.db import Base, close_redis, engine
 from app.error_handlers import register_exception_handlers
 from app.services import (
     get_embedding,
@@ -27,6 +27,8 @@ from app.services import (
     get_redis,
 )
 from app.schemas.common import PingResponse
+
+import app.db_models  # noqa: F401  # ensure SQLAlchemy models are registered
 
 from .ml.nlp.tasks import reindex_tasks
 from .ml.recsys.tasks import train_collaborative_filtering_model
@@ -44,6 +46,10 @@ _background_tasks = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
+        logger.info("Creating database tables if they do not exist...")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
         logger.info("Initializing all services...")
         await ensure_services_initialized(
             use_onnx=config.USE_ONNX,
