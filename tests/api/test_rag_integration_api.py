@@ -48,7 +48,7 @@ TECH_TASKS = [
 ]
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture()
 async def initialized_services():
     """Только глобальная инициализация сервисов (как для Celery)."""
     await services_registry.ensure_services_initialized()
@@ -79,7 +79,7 @@ async def initialized_services():
         await embedding_service.close()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 def stage_client(initialized_services):
     """Единый API клиент для этапов auth/tasks/rag."""
     app = FastAPI()
