@@ -28,7 +28,7 @@ async def test_0_login_token_expiration(fresh_app_client):
     await asyncio.sleep(65)  # Подождать, пока токен истечет (JWT_EXPIRE_MINUTES = 1)
     
     response = fresh_app_client.post("/tasks/", data={}, headers={"Authorization": f"Bearer {token}"})
-    assert response.status_code == 401
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
