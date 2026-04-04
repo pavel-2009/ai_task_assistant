@@ -102,17 +102,17 @@ def create_base_users_session():
     return client
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def auth_token_session(create_base_users_session):
-    """Фикстура для получения токена первого пользователя (один раз на сессию)."""
+    """Фикстура для получения токена первого пользователя (обновляется для каждого теста)."""
     response = create_base_users_session.post("/auth/login", data={"username": "testuser", "password": "TestPass123!"})
     assert response.status_code == 200
     return response.json().get("access_token")
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def auth_token2_session(create_base_users_session):
-    """Фикстура для получения токена второго пользователя (один раз на сессию)."""
+    """Фикстура для получения токена второго пользователя (обновляется для каждого теста)."""
     response = create_base_users_session.post("/auth/login", data={"username": "testuser2", "password": "TestPass456!"})
     assert response.status_code == 200
     return response.json().get("access_token")
