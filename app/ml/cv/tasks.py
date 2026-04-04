@@ -6,6 +6,7 @@ import logging
 
 from app.celery_app import celery_app
 from app.celery_metrics import track_celery_task
+from app.core import config
 from app.services import (
     get_inference,
     get_segmentation,
@@ -15,7 +16,6 @@ from app.services import (
     get_redis
 )
 
-from pathlib import Path
 from datetime import datetime
 
 import redis
@@ -80,7 +80,7 @@ def segment_image_task(task_id: int, image_path: str) -> bytes:
         
         segmented_image_bytes = segmentation_service.segment_image(image_bytes)
         
-        path_to_save = Path("/app/avatars/segments") / f"{task_id}_segmentation.png"
+        path_to_save = config.avatars_segments_dir / f"{task_id}_segmentation.png"
         
         if not path_to_save.parent.exists():
             path_to_save.parent.mkdir(parents=True, exist_ok=True)

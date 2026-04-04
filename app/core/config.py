@@ -1,4 +1,6 @@
-﻿from pydantic import field_validator
+﻿from pathlib import Path
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import torchvision
@@ -7,6 +9,7 @@ import torchvision
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    BASEDIR: Path = Path(__file__).resolve().parents[2]
     SECRET_KEY: str
     DATABASE_URL: str
     REDIS_URL: str
@@ -26,6 +29,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_PERIOD_SECONDS: int = 60
     METRICS_ENABLED: bool = True
     METRICS_PATH: str = "/metrics"
+    SERVICES_LOG_PATH: Path = Path("logs/services.log")
+    AVATARS_SEGMENTS_DIR: Path = Path("avatars/segments")
 
     LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
     LLM_MODEL: str = "meta-llama/llama-3.3-8b-instruct:free"
@@ -61,6 +66,18 @@ class Settings(BaseSettings):
         if value <= 0 or value > 1440:
             raise ValueError("JWT_EXPIRE_MINUTES must be > 0 and <= 1440")
         return value
+
+    @property
+    def services_log_path(self) -> Path:
+        if self.SERVICES_LOG_PATH.is_absolute():
+            return self.SERVICES_LOG_PATH
+        return self.BASEDIR / self.SERVICES_LOG_PATH
+
+    @property
+    def avatars_segments_dir(self) -> Path:
+        if self.AVATARS_SEGMENTS_DIR.is_absolute():
+            return self.AVATARS_SEGMENTS_DIR
+        return self.BASEDIR / self.AVATARS_SEGMENTS_DIR
 
 
 config = Settings()

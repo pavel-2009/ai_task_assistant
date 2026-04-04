@@ -9,12 +9,12 @@ from sqlalchemy import select, update
 from celery.result import AsyncResult
 
 import os
-from pathlib import Path as PathlibPath
 import uuid
 
 from app.db_models import Task, User
 from app.db import get_async_session
 from app.auth import get_current_user
+from app.core import config
 from app.utils.image_ops import validate_image, resize_image
 from app.ml.cv.tasks import detect_and_visualize_task, segment_image_task, predict_avatar_class
 from app.ml.nlp.tasks import update_recommendations_for_task
@@ -433,7 +433,7 @@ async def download_segmented_image(
             detail="Задача с указанным ID не найдена"
         )
         
-    segmented_image_path = PathlibPath("/app/avatars/segments") / f"{task_id}_segmentation.png"
+    segmented_image_path = config.avatars_segments_dir / f"{task_id}_segmentation.png"
     
     if not os.path.exists(segmented_image_path):
         raise HTTPException(
