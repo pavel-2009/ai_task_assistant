@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from collections.abc import AsyncGenerator, Generator
@@ -77,10 +78,23 @@ def unit_app(unit_session_maker) -> FastAPI:
     app.state.ner_service = DummyNerService()
     app.state.rag_service = DummyRagService()
 
-    async def _override_session() -> AsyncGenerator[AsyncSession, None]:
-        async with unit_session_maker() as session:
+    # Создаём event loop для синхронной обёртки
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    # Синхронный генератор, который внутри использует асинхронный
+    def _override_session() -> Generator[AsyncSession, None, None]:
+        # Получаем сессию асинхронно
+        async def _get_session():
+            async with unit_session_maker() as session:
+                return session
+        
+        session = loop.run_until_complete(_get_session())
+        try:
             yield session
-
+        finally:
+            loop.run_until_complete(session.close())
+    
     app.dependency_overrides[get_async_session] = _override_session
     return app
 
