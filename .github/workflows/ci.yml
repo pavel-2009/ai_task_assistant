@@ -26,7 +26,7 @@ jobs:
       CELERY_BROKER_URL: redis://localhost:6379/0
       CELERY_RESULT_BACKEND: redis://localhost:6379/0
       CELERY_INIT_SERVICES_ON_STARTUP: "true"
-      LLM_API_KEY: test-llm-key
+      LLM_API_KEY: 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
 
     steps:
       - name: Checkout
