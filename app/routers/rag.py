@@ -3,7 +3,7 @@
 """
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_async_session
 from ..error_handlers import AppError
 from ..schemas import AskRequest, AskResponse
+from ..services import get_rag
+from ..ml.nlp.rag_service import RAGService
 from app.ml.nlp.tasks import reindex_tasks as reindex_tasks_task
 
 logger = logging.getLogger(__name__)
@@ -23,14 +25,12 @@ router = APIRouter(
 
 @router.post("/reindex", description="Переиндексация задач в RAG API")
 async def reindex_tasks_endpoint(
-    request: Request,
+    rag_service: RAGService = Depends(get_rag),
     session: AsyncSession = Depends(get_async_session)
 ):
     """
     Ручной триггер для переиндексации задач в RAG API.
     """
-    rag_service = getattr(request.app.state, "rag_service", None)
-
     if not rag_service:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -47,15 +47,13 @@ async def reindex_tasks_endpoint(
 
 @router.post("/ask", response_model=AskResponse)
 async def ask(
-    request: Request,
     body: AskRequest,
+    rag_service: RAGService = Depends(get_rag),
     session: AsyncSession = Depends(get_async_session)
 ):
     """
     Запрос к RAG модели.
     """
-    rag_service = getattr(request.app.state, "rag_service", None)
-
     if not rag_service:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -85,16 +83,14 @@ async def ask(
 
 @router.post("/ask/stream", description="Потоковый SSE-запрос к RAG модели, returns text/event-stream")
 async def ask_stream(
-    request: Request,
     body: AskRequest,
+    rag_service: RAGService = Depends(get_rag),
     session: AsyncSession = Depends(get_async_session)
 ):
     """
     Потоковый SSE-запрос к RAG модели.
     Возвращает поток данных в формате Server-Sent Events (text/event-stream).
     """
-    rag_service = getattr(request.app.state, "rag_service", None)
-
     if not rag_service:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

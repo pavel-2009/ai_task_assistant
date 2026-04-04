@@ -34,9 +34,9 @@ def nlp_client(api_sessionmaker):
     app = FastAPI()
     app.include_router(nlp_router.router)
 
-    app.state.embedding_service = FakeEmbeddingService()
-    app.state.semantic_search_service = FakeSemanticSearchService()
-    app.state.ner_service = FakeNerService()
+    app.dependency_overrides[nlp_router.get_embedding_service_dependency] = FakeEmbeddingService
+    app.dependency_overrides[nlp_router.get_semantic_search_service_dependency] = FakeSemanticSearchService
+    app.dependency_overrides[nlp_router.get_ner_service_dependency] = FakeNerService
 
     # Ключевой комментарий: для зависимостей БД используем session из test.db.
     async def _override_session():
