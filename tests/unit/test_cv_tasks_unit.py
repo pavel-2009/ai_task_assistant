@@ -66,7 +66,7 @@ def test_segment_image_task_saves_output(tmp_path, monkeypatch):
             return b"segmented-bytes"
 
     monkeypatch.setattr(cv_tasks, "get_segmentation", lambda: _Segmentation())
-    monkeypatch.setattr(cv_tasks, "Path", lambda _p: tmp_path / "segments")
+    monkeypatch.setattr(cv_tasks, "get_avatar_segments_dir", lambda: tmp_path / "segments")
 
     result = cv_tasks.segment_image_task(task_id=3, image_path=str(image_path))
 
