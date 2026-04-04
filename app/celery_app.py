@@ -48,6 +48,10 @@ celery_app.conf.beat_schedule = {
 @worker_process_init.connect
 def init_services_for_worker(**kwargs):
     """Единая инициализация сервисов для каждого процесса Celery worker."""
+    if not config.CELERY_INIT_SERVICES_ON_STARTUP:
+        logger.info("Skipping Celery services initialization on worker startup")
+        return
+
     try:
         asyncio.run(ensure_services_initialized(use_onnx=config.USE_ONNX))
         logger.info("Celery services initialized")
