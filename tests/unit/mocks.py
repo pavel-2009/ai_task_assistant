@@ -28,7 +28,16 @@ class DummySemanticSearchService:
         self._indexed: list[str] = []
 
     async def search(self, query: str, session, top_k: int = 5):
-        return [{"id": i + 1, "text": text} for i, text in enumerate(self._indexed[:top_k])]
+        return [
+            {
+                "text_id": str(i + 1),
+                "task_id": i + 1,
+                "text": text,
+                "similarity": 0.9,
+                "score": 0.9,
+            }
+            for i, text in enumerate(self._indexed[:top_k])
+        ]
 
     async def index(self, text: str, session):
         self._indexed.append(text)
@@ -49,7 +58,10 @@ class DummyRagService:
     async def ask(self, query: str, session, top_k: int, use_cache: bool):
         return {
             "answer": f"answer for {query}",
-            "sources": [1, 2],
+            "sources": [
+                {"text_id": "1", "text": "source one", "score": 0.91},
+                {"text_id": "2", "text": "source two", "score": 0.87},
+            ],
             "confidence": 0.9,
             "cached": use_cache,
         }

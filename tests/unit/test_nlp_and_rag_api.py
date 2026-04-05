@@ -19,6 +19,9 @@ def test_nlp_index_search_and_tag(unit_client_a: TestClient):
     assert index_resp.status_code == 200
     assert search_resp.status_code == 200
     assert search_resp.json()["total"] >= 1
+    first_result = search_resp.json()["results"][0]
+    assert "text_id" in first_result
+    assert isinstance(first_result["text_id"], str)
     assert tag_resp.status_code == 200
     assert "python" in tag_resp.json()["tags"]
 
@@ -28,5 +31,8 @@ def test_rag_ask_and_reindex(unit_client_a: TestClient):
     reindex_resp = unit_client_a.post("/rag/reindex")
 
     assert ask_resp.status_code == 200
-    assert ask_resp.json()["answer"]
+    ask_payload = ask_resp.json()
+    assert ask_payload["answer"]
+    assert isinstance(ask_payload["sources"], list)
+    assert isinstance(ask_payload["sources"][0], dict)
     assert reindex_resp.status_code == 200
