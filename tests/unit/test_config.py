@@ -32,9 +32,11 @@ def test_jwt_expire_minutes_over_1440_validation():
 
 def test_empty_secret_key_validation():
     with pytest.raises(ValidationError):
-        Settings(**BASE, SECRET_KEY='')
+        BASE["SECRET_KEY"] = ""
+        Settings(**BASE)
 
 
 def test_whitespace_secret_key_validation():
     with pytest.raises(ValidationError):
-        Settings(**BASE, SECRET_KEY='   ')
+        BASE["SECRET_KEY"] = " "
+        Settings(**BASE)
