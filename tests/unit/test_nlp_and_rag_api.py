@@ -19,6 +19,9 @@ def test_nlp_index_search_and_tag(unit_client_a: TestClient):
     assert index_resp.status_code == 200
     assert search_resp.status_code == 200
     assert search_resp.json()["total"] >= 1
+    first_result = search_resp.json()["results"][0]
+    assert "text_id" in first_result
+    assert isinstance(first_result["text_id"], str)
     assert tag_resp.status_code == 200
     assert "python" in tag_resp.json()["tags"]
 

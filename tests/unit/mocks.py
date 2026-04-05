@@ -28,7 +28,16 @@ class DummySemanticSearchService:
         self._indexed: list[str] = []
 
     async def search(self, query: str, session, top_k: int = 5):
-        return [{"id": i + 1, "text": text} for i, text in enumerate(self._indexed[:top_k])]
+        return [
+            {
+                "text_id": str(i + 1),
+                "task_id": i + 1,
+                "text": text,
+                "similarity": 0.9,
+                "score": 0.9,
+            }
+            for i, text in enumerate(self._indexed[:top_k])
+        ]
 
     async def index(self, text: str, session):
         self._indexed.append(text)
