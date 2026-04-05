@@ -22,7 +22,7 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       CELERY_BROKER_URL: redis://localhost:6379/0
       CELERY_RESULT_BACKEND: redis://localhost:6379/0
-      CELERY_INIT_SERVICES_ON_STARTUP: "false"
+      CELERY_INIT_SERVICES_ON_STARTUP: "true"
       USE_ONNX: "false"
       LLM_API_KEY: "dummy-ci-key"
       LLM_BASE_URL: "http://127.0.0.1:9999"
@@ -43,10 +43,50 @@ jobs:
           
       - name: Start services (Redis -> Celery -> Uvicorn)
         run: |
+          set -euo pipefail
+
+          redis_ready=false
+          for i in {1..30}; do
+            if redis-cli -h localhost -p 6379 ping | grep -q PONG; then
+              redis_ready=true
+              echo "Redis is ready"
+              break
+            fi
+            echo "Waiting for Redis..."
+            sleep 2
+          done
+          if [ "$redis_ready" = false ]; then
+            echo "Redis did not become ready in time"
+            exit 1
+          fi
+
           celery -A app.celery_app worker --loglevel=info --pool=solo &
           sleep 40
+
           uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-          sleep 100
+
+          app_ready=false
+          for i in {1..60}; do
+            if curl -sf http://127.0.0.1:8000/ping >/tmp/ping.json; then
+              python - <<'PY2'
+import json
+from pathlib import Path
+resp = json.loads(Path("/tmp/ping.json").read_text())
+print(resp)
+if not resp.get("models_ready"):
+    raise SystemExit("Services were not initialized: models_ready=false")
+PY2
+              app_ready=true
+              echo "Application services initialized"
+              break
+            fi
+            echo "Waiting for application startup..."
+            sleep 2
+          done
+          if [ "$app_ready" = false ]; then
+            echo "Application did not start in time"
+            exit 1
+          fi
           
       - name: Run tests
         run: pytest tests/ --cov=. -v --tb=short
