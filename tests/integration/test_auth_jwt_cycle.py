@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import os
 import time
 import uuid
 
 import jwt
 import pytest
+from app.core import config
 
 
 def _creds(prefix: str = "it_user") -> dict[str, str]:
@@ -80,8 +80,8 @@ def test_jwt_full_lifecycle(integration_httpx_client_a):
 
     expired_token = jwt.encode(
         {"user_id": create_task.json()["author_id"], "exp": int(time.time()) - 60},
-        os.getenv("SECRET_KEY", "test-secret-key"),
-        algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
+        config.SECRET_KEY,
+        algorithm=config.JWT_ALGORITHM,
     )
     expired = integration_httpx_client_a.post(
         "/tasks/",
