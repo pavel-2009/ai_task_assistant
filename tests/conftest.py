@@ -113,14 +113,16 @@ def patch_celery_tasks(monkeypatch):
 @pytest.fixture(scope="function")
 def unit_client_a(unit_app: FastAPI) -> Generator[TestClient, None, None]:
     with TestClient(unit_app) as client:
-        _register_and_login(client, USER_A)
+        token = _register_and_login(client, USER_A)
+        client.headers.update({"Authorization": f"Bearer {token}"})
         yield client
 
 
 @pytest.fixture(scope="function")
 def unit_client_b(unit_app: FastAPI) -> Generator[TestClient, None, None]:
     with TestClient(unit_app) as client:
-        _register_and_login(client, USER_B)
+        token = _register_and_login(client, USER_B)
+        client.headers.update({"Authorization": f"Bearer {token}"})
         yield client
 
 
