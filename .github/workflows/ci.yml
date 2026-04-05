@@ -44,9 +44,9 @@ jobs:
       - name: Start services (Redis -> Celery -> Uvicorn)
         run: |
           celery -A app.celery_app worker --loglevel=info --pool=solo &
-          sleep 15
+          sleep 40
           uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-          sleep 80
+          sleep 100
           
       - name: Run tests
-        run: pytest tests/ -v --tb=short
+        run: pytest tests/ --cov=. -v --tb=short
