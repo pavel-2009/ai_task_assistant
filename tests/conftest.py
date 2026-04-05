@@ -26,7 +26,9 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("CELERY_BROKER_URL", "redis://localhost:6379/1")
 os.environ.setdefault("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
 os.environ.setdefault("LLM_API_KEY", "test-llm-key")
+os.environ.setdefault("TEST_BASE_URL", "http://127.0.0.1:8000")
 
+from app.core import config
 from app.db import get_async_session
 from app.db_models import Base
 from app.error_handlers import register_exception_handlers
@@ -128,7 +130,7 @@ def unit_client_b(unit_app: FastAPI) -> Generator[TestClient, None, None]:
 
 @pytest.fixture(scope="session")
 def integration_base_url() -> str:
-    return os.getenv("TEST_BASE_URL", "http://127.0.0.1:8000")
+    return config.TEST_BASE_URL
 
 
 @pytest.fixture(scope="session")
