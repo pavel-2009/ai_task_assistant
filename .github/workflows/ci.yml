@@ -73,11 +73,26 @@ import json
 from pathlib import Path
 resp = json.loads(Path("/tmp/ping.json").read_text())
 print(resp)
-if not resp.get("models_ready"):
-    raise SystemExit("Services were not initialized: models_ready=false")
+
+required_services = {
+    "embedding",
+    "vector_db",
+    "semantic_search",
+    "ner",
+    "rag",
+    "data_drift",
+}
+models = resp.get("models") or {}
+missing = sorted(required_services - models.keys())
+if missing:
+    raise SystemExit(f"Ping response is missing required services: {missing}")
+
+not_ready = sorted(name for name in required_services if not models.get(name, {}).get("ready"))
+if not_ready:
+    raise SystemExit(f"Core services were not initialized: {not_ready}")
 PY2
               app_ready=true
-              echo "Application services initialized"
+              echo "Application core services initialized"
               break
             fi
             echo "Waiting for application startup..."
