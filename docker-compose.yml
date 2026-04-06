@@ -39,7 +39,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ai_task_assistant_celery
-    command: celery -A app.celery_app worker -B --loglevel=info
+    command: celery -A app.celery_app worker --loglevel=info
     env_file:
       - .env
     environment:

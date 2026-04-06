@@ -13,7 +13,8 @@ RUN pip install --no-cache-dir -r prod_req.txt
 
 COPY . .
 
-RUN mkdir -p avatars checkpoints
+RUN mkdir -p avatars checkpoints data \
+    && chmod -R a+rwX /app
 
 EXPOSE 8000
 
