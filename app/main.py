@@ -5,8 +5,6 @@
 from __future__ import annotations
 
 import logging
-import os
-import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response, status
@@ -35,13 +33,22 @@ from .ml.recsys.tasks import train_collaborative_filtering_model
 
 logger = logging.getLogger(__name__)
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 # Переменные для хранения ID фоновых задач
 _background_tasks = {
     "reindex_tasks": None,
     "train_cf": None,
 }
+
+
+def _safe_revoke_background_task(task_name: str, task: object) -> None:
+    if task is None:
+        return
+    try:
+        task.revoke(terminate=False)
+        logger.info("Задача '%s' отменена", task_name)
+    except Exception as exc:
+        logger.warning("Ошибка при отмене задачи '%s': %s", task_name, exc)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -74,18 +81,21 @@ async def lifespan(app: FastAPI):
         except Exception as warmup_exc:
             logger.warning("Could not schedule LLM warmup task: %s", warmup_exc)
 
-        # Запуск фоновых задач (может быть недоступно в тестовом окружении)
-        try:
-            logger.info("Starting background task for reindexing...")
-            _background_tasks["reindex_tasks"] = reindex_tasks.delay()
-            logger.info("Background task for reindexing started successfully")
+        if config.CELERY_INIT_SERVICES_ON_STARTUP:
+            # Запуск фоновых задач (может быть недоступно в тестовом окружении)
+            try:
+                logger.info("Starting background task for reindexing...")
+                _background_tasks["reindex_tasks"] = reindex_tasks.delay()
+                logger.info("Background task for reindexing started successfully")
 
-            logger.info("Starting background task for training collaborative filtering model...")
-            _background_tasks["train_cf"] = train_collaborative_filtering_model.delay()
-            logger.info("Background task for training collaborative filtering model started successfully")
-        except Exception as bg_exc:
-            logger.warning("Could not start background tasks (Redis may be unavailable): %s", bg_exc)
-            # Не прерываем запуск приложения, продолжаем работу без фоновых задач
+                logger.info("Starting background task for training collaborative filtering model...")
+                _background_tasks["train_cf"] = train_collaborative_filtering_model.delay()
+                logger.info("Background task for training collaborative filtering model started successfully")
+            except Exception as bg_exc:
+                logger.warning("Could not start background tasks (Redis may be unavailable): %s", bg_exc)
+                # Не прерываем запуск приложения, продолжаем работу без фоновых задач
+        else:
+            logger.info("CELERY_INIT_SERVICES_ON_STARTUP disabled; skip scheduling startup background tasks")
 
     except Exception as exc:
         logger.error("Error during startup: %s", exc, exc_info=True)
@@ -99,28 +109,23 @@ async def lifespan(app: FastAPI):
         # Отменяем все активные фоновые задачи
         logger.info("Отмена фоновых задач...")
         for task_name, task in _background_tasks.items():
-            if task:
-                try:
-                    task.revoke(terminate=False)
-                    logger.info(f"Задача '{task_name}' отменена")
-                except Exception as e:
-                    logger.warning(f"Ошибка при отмене задачи '{task_name}': {e}")
+            _safe_revoke_background_task(task_name, task)
         
         # Закрываем Redis
         logger.info("Закрытие соединения с Redis...")
         try:
             await close_redis()
             logger.info("Redis соединение закрыто")
-        except Exception as e:
-            logger.warning(f"Ошибка при закрытии Redis: {e}")
+        except Exception as exc:
+            logger.warning("Ошибка при закрытии Redis: %s", exc)
         
         # Закрываем async_session и engine
         logger.info("Закрытие database engine...")
         try:
             await engine.dispose()
             logger.info("Database engine закрыт")
-        except Exception as e:
-            logger.warning(f"Ошибка при закрытии engine: {e}")
+        except Exception as exc:
+            logger.warning("Ошибка при закрытии engine: %s", exc)
         
         logger.info("Graceful shutdown завершен")
 

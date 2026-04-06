@@ -48,8 +48,8 @@ def default_inference_checkpoint_path() -> str:
 async def init_services(
     use_onnx: bool = False,
     redis_client: redis.Redis | None = None,
-    inference_checkpoint_path: str = None,
-    inference_idx_to_class: dict = None,
+    inference_checkpoint_path: str | None = None,
+    inference_idx_to_class: dict | None = None,
 ) -> None:
     """Инициализирует все сервисы один раз при старте приложения."""
     global _initialized
@@ -64,16 +64,17 @@ async def init_services(
         except RedisError:
             redis_client = None
             logger.warning("Не удалось подключиться к Redis. Некоторые функции будут недоступны.")
-        except Exception as e:
+        except Exception as exc:
             redis_client = None
-            logger.error(f"Ошибка при инициализации Redis: {e}")
+            logger.error("Ошибка при инициализации Redis: %s", exc)
         
     _services["redis"] = redis_client
     
     # CV сервисы
-    logger.info("Loading service 'inference' (model checkpoint: %s)", inference_checkpoint_path)
+    checkpoint_path = inference_checkpoint_path or default_inference_checkpoint_path()
+    logger.info("Loading service 'inference' (model checkpoint: %s)", checkpoint_path)
     _services["inference"] = InferenceService(
-        checkpoints_path=inference_checkpoint_path,
+        checkpoints_path=checkpoint_path,
         idx_to_class=inference_idx_to_class or {}
     )
     

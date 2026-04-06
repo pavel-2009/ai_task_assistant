@@ -1,11 +1,9 @@
-﻿from pydantic import field_validator
+﻿from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-import torchvision
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     SECRET_KEY: str
     DATABASE_URL: str
@@ -32,8 +30,9 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "meta-llama/llama-3.3-8b-instruct:free"
     LLM_API_KEY: str
     LLM_TIMEOUT_SECONDS: float = 60.0
-    
-    INFERENCE_IDX_TO_CLASS: dict[int, str] = {0: "cat", 1: "dog", 2: "house"}
+    TEST_BASE_URL: str = "http://127.0.0.1:8000"
+
+    INFERENCE_IDX_TO_CLASS: dict[int, str] = Field(default_factory=lambda: {0: "cat", 1: "dog", 2: "house"})
     
     USER_PROMPT: str = """Вот похожие задачи из системы:
 
