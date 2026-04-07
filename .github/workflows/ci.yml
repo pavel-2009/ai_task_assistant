@@ -8,26 +8,33 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     env:
-      SECRET_KEY: ci-secret-key
-      DATABASE_URL: sqlite+aiosqlite:///./ci_test.db
-      REDIS_URL: redis://localhost:6379/0
-      CELERY_BROKER_URL: redis://localhost:6379/1
-      CELERY_RESULT_BACKEND: redis://localhost:6379/2
-      LLM_API_KEY: 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
-      TEST_BASE_URL: http://127.0.0.1:8000
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      REDIS_URL: ${{ secrets.REDIS_URL }}
+      CELERY_BROKER_URL: ${{ secrets.CELERY_BROKER_URL }}
+      CELERY_RESULT_BACKEND: ${{ secrets.CELERY_RESULT_BACKEND }}
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+      LLM_MODEL: ${{ secrets.LLM_MODEL }}
+      LLM_TIMEOUT_SECONDS: ${{ secrets.LLM_TIMEOUT_SECONDS }}
+      JWT_EXPIRE_MINUTES: ${{ secrets.JWT_EXPIRE_MINUTES }}
+      JWT_ALGORITHM: ${{ secrets.JWT_ALGORITHM }}
+      USE_ONNX: ${{ secrets.USE_ONNX }}
+      CELERY_INIT_SERVICES_ON_STARTUP: ${{ secrets.CELERY_INIT_SERVICES_ON_STARTUP }}
+      MAX_IMAGE_SIZE_PX: ${{ secrets.MAX_IMAGE_SIZE_PX }}
+      DEFAULT_TOP_K: ${{ secrets.DEFAULT_TOP_K }}
+      FRAME_CACHE_SIZE: ${{ secrets.FRAME_CACHE_SIZE }}
+      YOLO_CONF_THRESHOLD: ${{ secrets.YOLO_CONF_THRESHOLD }}
+      YOLO_IOU_THRESHOLD: ${{ secrets.YOLO_IOU_THRESHOLD }}
+      RATE_LIMIT_REQUESTS: ${{ secrets.RATE_LIMIT_REQUESTS }}
+      RATE_LIMIT_PERIOD_SECONDS: ${{ secrets.RATE_LIMIT_PERIOD_SECONDS }}
+      METRICS_ENABLED: ${{ secrets.METRICS_ENABLED }}
+      METRICS_PATH: ${{ secrets.METRICS_PATH }}
+      PYTHONUNBUFFERED: ${{ secrets.PYTHONUNBUFFERED }}
 
     steps:
       - name: Checkout
@@ -36,40 +43,62 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Prepare CI env file
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install -r prod_req.txt
-          pip install pytest pytest-cov
+          cat > .env.ci <<EOF
+          POSTGRES_USER=${POSTGRES_USER:-postgres}
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+          POSTGRES_DB=${POSTGRES_DB:-postgres}
+          DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://postgres:password@postgres:5432/postgres}
+          REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+          CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+          CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+          SECRET_KEY=${SECRET_KEY:-ci-secret-key}
+          LLM_API_KEY=${LLM_API_KEY:-ci-llm-key}
+          LLM_BASE_URL=${LLM_BASE_URL:-https://openrouter.ai/api/v1}
+          LLM_MODEL=${LLM_MODEL:-meta-llama/llama-3.3-8b-instruct:free}
+          LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-60}
+          JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-60}
+          JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+          USE_ONNX=${USE_ONNX:-false}
+          CELERY_INIT_SERVICES_ON_STARTUP=${CELERY_INIT_SERVICES_ON_STARTUP:-false}
+          MAX_IMAGE_SIZE_PX=${MAX_IMAGE_SIZE_PX:-1024}
+          DEFAULT_TOP_K=${DEFAULT_TOP_K:-5}
+          FRAME_CACHE_SIZE=${FRAME_CACHE_SIZE:-5}
+          YOLO_CONF_THRESHOLD=${YOLO_CONF_THRESHOLD:-0.35}
+          YOLO_IOU_THRESHOLD=${YOLO_IOU_THRESHOLD:-0.55}
+          RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
+          RATE_LIMIT_PERIOD_SECONDS=${RATE_LIMIT_PERIOD_SECONDS:-60}
+          METRICS_ENABLED=${METRICS_ENABLED:-true}
+          METRICS_PATH=${METRICS_PATH:-/metrics}
+          PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-1}
+          EOF
 
-      - name: Start Celery worker
-        run: |
-          celery -A app.celery_app worker --loglevel=info --pool=solo > celery.log 2>&1 &
-          echo $! > celery.pid
-
-      - name: Start FastAPI app
-        run: |
-          uvicorn app.main:app --host 127.0.0.1 --port 8000 > app.log 2>&1 &
-          echo $! > app.pid
+      - name: Start docker compose stack
+        shell: bash
+        run: docker compose --env-file .env.ci up -d --build
 
       - name: Wait for app startup
+        shell: bash
         run: |
           for i in {1..60}; do
-            if curl -fsS http://127.0.0.1:8000/ping >/dev/null; then
-              echo "App is up"
+            status_code="$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/ping || true)"
+            if [ "$status_code" = "200" ] || [ "$status_code" = "503" ]; then
+              echo "App is reachable with /ping status $status_code"
               exit 0
             fi
-            sleep 2
+            sleep 20
           done
           echo "App did not start in time"
-          tail -n 200 app.log || true
+          docker compose --env-file .env.ci logs --tail=200
           exit 1
 
       - name: Run tests with coverage
-        run: |
-          pytest --cov=app --cov-report=term-missing --cov-report=xml
+        shell: bash
+        run: docker compose --env-file .env.ci exec -T api pytest --cov=app --cov-report=xml:coverage.xml
 
       - name: Upload coverage artifact
         if: always()
@@ -80,14 +109,10 @@ jobs:
 
       - name: Dump logs on failure
         if: failure()
-        run: |
-          echo "========== app.log =========="
-          cat app.log || true
-          echo "========== celery.log =========="
-          cat celery.log || true
+        shell: bash
+        run: docker compose --env-file .env.ci logs --tail=200
 
       - name: Stop background services
         if: always()
-        run: |
-          kill "$(cat app.pid)" 2>/dev/null || true
-          kill "$(cat celery.pid)" 2>/dev/null || true
+        shell: bash
+        run: docker compose --env-file .env.ci down -v

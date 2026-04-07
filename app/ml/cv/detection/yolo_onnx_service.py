@@ -1,10 +1,13 @@
-"""
-ONNX-сервис для YOLOv8 с возвратом имени класса (обратная совместимость)
+"""Backward-compatible alias for the unified YOLO service."""
 
-Это модуль для обеспечения обратной совместимости.
-Основная реализация находится в пакете yolo_onnx/
-"""
+from .yolo_service import YoloService
 
-from .yolo_onnx import YoloONNXService
 
-__all__ = ['YoloONNXService']
+class YoloONNXService(YoloService):
+    """Compatibility wrapper for ONNX-based YOLO inference."""
+
+    def __init__(self):
+        super().__init__(provider="onnx")
+
+
+__all__ = ["YoloONNXService"]

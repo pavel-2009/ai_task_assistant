@@ -1,234 +1,89 @@
-"""
-Роутер для управления задачами 
-"""
+"""Task management router."""
 
-from fastapi import APIRouter, status, Depends, HTTPException, Path, Response
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, Path, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
 
-import typing
-
-from app.db_models import Task, User
-from app.schemas import (
-    TaskCreate, TaskGet, TaskUpdate, SuccessMessageResponse, TaskStatusResponse
-)
-from app.db import get_async_session
 from app.auth import get_current_user
+from app.core.dependencies import check_owner, get_task_or_404
+from app.db import get_async_session
+from app.db_models import Task, User
 from app.ml.nlp.tasks import process_task_tags_and_embedding, update_recommendations_for_task
-from app.ml.recsys.tasks import process_task_interaction, delete_task_interactions
-from app.core.dependencies import get_task_or_404, check_owner
+from app.ml.recsys.tasks import delete_task_interactions, process_task_interaction
+from app.schemas import SuccessMessageResponse, TaskCreate, TaskGet, TaskStatusResponse, TaskUpdate
+from app.services import TaskService
+
+router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-router = APIRouter(
-    prefix="/tasks",
-    tags=["tasks"]
-)
+def get_task_service() -> TaskService:
+    return TaskService(
+        process_task_tags_and_embedding=process_task_tags_and_embedding,
+        update_recommendations_for_task=update_recommendations_for_task,
+        process_task_interaction=process_task_interaction,
+        delete_task_interactions=delete_task_interactions,
+    )
 
 
-
-@router.get("/", status_code=status.HTTP_200_OK, description="Получение всех задач", response_model=list[TaskGet])
-async def get_tasks(
-    session: AsyncSession = Depends(get_async_session)
-):
-    """Получение всех задач"""
-
-    task = await session.execute(select(Task))
-    tasks = task.scalars().all()
-
-    return [
-        TaskGet(
-            id=task.id,
-            title=task.title,
-            description=task.description,
-            author_id=task.author_id
-        )
-        for task in tasks
-    ]
+@router.get("/", status_code=status.HTTP_200_OK, response_model=list[TaskGet])
+async def get_tasks(session: AsyncSession = Depends(get_async_session)):
+    return await get_task_service().list_tasks(session=session)
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, description="Создание задачи", response_model=TaskGet)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=TaskGet)
 async def create_task(
     task: TaskCreate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
 ):
-    """Создание задачи"""
-    
-    task = Task(**task.model_dump())
-    task.author_id = current_user.id
-    task.tags = None  # Изначально теги не установлены, они будут обработаны в фоне
-    
-    
-    session.add(task)
-    await session.commit()
-
-    await session.refresh(task)
-    
-    # Запускаем фоновую задачу для обработки тегов и эмбеддингов
-    process_task_tags_and_embedding.delay(
-        task_id=task.id,
-        title=task.title,
-        description=task.description
-    )
-    
-    # Запускаем фоновую задачу для обработки взаимодействия пользователя с задачей (создание)
-    process_task_interaction.delay(
-        user_id=current_user.id,
-        task_id=task.id,
-        event_type="create",
-        weight=1,
-    )
-    
-    # Запускаем фоновую задачу для обновления рекомендаций для всех задач (включая новую)
-    update_recommendations_for_task.delay(
-        task_id=task.id,
-    )
-
-    return TaskGet(
-        id=task.id,
-        title=task.title,
-        description=task.description,
-        author_id=task.author_id
-    )
+    return await get_task_service().create_task(session=session, payload=task, current_user=current_user)
 
 
-@router.get("/{task_id}/tags_status", status_code=status.HTTP_200_OK, description="Проверка статуса обработки тегов задачи", response_model=TaskStatusResponse)
+@router.get("/{task_id}/tags_status", status_code=status.HTTP_200_OK, response_model=TaskStatusResponse)
 async def check_tags_status(
     task_id: int = Path(...),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
 ):
-    """Проверка статуса обработки тегов задачи"""
-
-    task = await session.execute(select(Task).where(Task.id == task_id))
-    task = task.scalar_one_or_none()
-
-    if task is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Задача с указанным ID не найдена"
-        )
-
-    return TaskStatusResponse(
-        tags=task.tags,
-        is_processing=task.tags is None
-    )
+    return await get_task_service().get_tags_status(session=session, task_id=task_id)
 
 
-@router.get("/{task_id}", status_code=status.HTTP_200_OK, description="Получение задачи по ID", response_model=TaskGet)
+@router.get("/{task_id}", status_code=status.HTTP_200_OK, response_model=TaskGet)
 async def get_task(
     task: Task = Depends(get_task_or_404),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    """Получение задачи по ID"""
+    return await get_task_service().record_view(task=task, current_user=current_user)
 
-    # Запускаем фоновую задачу для обработки взаимодействия пользователя с задачей (просмотр)
-    process_task_interaction.delay(
-        user_id=current_user.id,
-        task_id=task.id,
-        event_type="view",
-        weight=0.5,
-    )
-    
-    return TaskGet(
-        id=task.id,
-        title=task.title,
-        description=task.description,
-        author_id=task.author_id
-    )
-    
-    
-@router.post("/{task_id}/like", status_code=status.HTTP_200_OK, description="Поставить лайк задаче", response_model=SuccessMessageResponse)
+
+@router.post("/{task_id}/like", status_code=status.HTTP_200_OK, response_model=SuccessMessageResponse)
 async def like_task(
     task_id: int = Path(...),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
 ):
-    """Поставить лайк задаче"""
-    
-    task = await session.execute(select(Task).where(Task.id == task_id))
-    task = task.scalar_one_or_none()
-
-    if task is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Задача с указанным ID не найдена"
-        )
-    
-    # Запускаем фоновую задачу для обработки взаимодействия пользователя с задачей (лайк)
-    process_task_interaction.delay(
-        user_id=current_user.id,
-        task_id=task_id,
-        event_type="like",
-        weight=1,
-    )
-
-    return SuccessMessageResponse(message="Задаче поставлен лайк")
+    return await get_task_service().like_task(session=session, task_id=task_id, current_user=current_user)
 
 
-@router.put("/{task_id}", status_code=status.HTTP_200_OK, description="Обновление задачи", response_model=TaskGet)
+@router.put("/{task_id}", status_code=status.HTTP_200_OK, response_model=TaskGet)
 async def update_task(
     task_id: int = Path(...),
-    task_update: typing.Optional[TaskUpdate] = None,
+    task_update: TaskUpdate | None = None,
     session: AsyncSession = Depends(get_async_session),
-    task: Task = Depends(check_owner)
+    task: Task = Depends(check_owner),
 ):
-    """Обновление задачи"""
-
-    update_dict = task_update.model_dump(exclude_unset=True) if task_update else {}
-    
-    if "title" in update_dict or "description" in update_dict:
-        # Если обновляются title или description, нужно заново обработать теги и эмбеддинги
-        process_task_tags_and_embedding.delay(
-            task_id=task.id,
-            title=update_dict.get("title", task.title),
-            description=update_dict.get("description", task.description)
-        )
-        
-        update_dict["tags"] = None  # Сбрасываем теги, они будут обновлены в фоне
-        
-        update_recommendations_for_task.delay(
-            task_id=task.id
-        )
-        
-
-    await session.execute(
-        update(Task).where(Task.id == task_id).values(**update_dict)
-    )
-    
-    await session.commit()
-
-    return TaskGet(
-        id=task.id,
-        title=update_dict.get("title", task.title),
-        description=update_dict.get("description", task.description),
-        author_id=task.author_id,
-        tags=update_dict.get("tags", task.tags)
+    return await get_task_service().update_task(
+        session=session,
+        task_id=task_id,
+        task=task,
+        task_update=task_update,
     )
 
 
-@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT, description="Удаление задачи")
+@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(
     task_id: int = Path(...),
     session: AsyncSession = Depends(get_async_session),
-    is_author: bool = Depends(check_owner)
+    is_author: bool = Depends(check_owner),
 ):
-    """Удаление задачи"""
-    
-    if not is_author:
-        raise HTTPException(
-            status_code=403,
-            detail="У вас нет прав на удаление этой задачи"
-        )
-
-    # Удаляем вызовы взаимодействия текущей задачи
-    delete_task_interactions.delay(
-        task_id=task_id
-    )
-
-    await session.execute(
-        delete(Task).where(Task.id == task_id)
-    )
-    
-    await session.commit()
-    
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return await get_task_service().delete_task(session=session, task_id=task_id, is_author=is_author)

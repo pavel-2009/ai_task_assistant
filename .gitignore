@@ -12,3 +12,6 @@ data/
 logs/
 .VSCodeCounter/
 .coverage
+checkpoints/
+*.pt
+*.onnx

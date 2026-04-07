@@ -12,9 +12,10 @@ from PIL import Image
 from io import BytesIO
 
 import numpy as np
+from app.ml.base import BaseMLService
 
 
-class ImageEmbeddingService:
+class ImageEmbeddingService(BaseMLService):
     """Сервис для получения эмбеддингов изображений."""
     
     def __init__(self):
@@ -58,3 +59,6 @@ class ImageEmbeddingService:
             mode="constant",
             constant_values=0.0,
         )
+
+    def predict(self, data: bytes) -> np.ndarray:
+        return self.get_embedding(data)

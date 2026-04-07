@@ -9,10 +9,11 @@ import torch
 import time
 from sentence_transformers import SentenceTransformer
 
+from app.ml.base import BaseMLService
 from app.ml.metrics import MLMetricsCollector
 
 
-class EmbeddingService:
+class EmbeddingService(BaseMLService):
     """Сервис для получения эмбеддингов текста."""
 
     def __init__(self) -> None:
@@ -83,3 +84,8 @@ class EmbeddingService:
             raise ValueError("Векторы должны иметь одинаковую размерность")
 
         return float(np.dot(vec1, vec2))
+
+    def predict(self, data: str | list[str]) -> np.ndarray:
+        if isinstance(data, str):
+            return self.encode_one(data)
+        return self.encode_batch(data)

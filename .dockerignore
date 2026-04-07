@@ -6,3 +6,5 @@ __pycache__/
 avatars/
 checkpoints/
 test.db
+.env
+.env.*

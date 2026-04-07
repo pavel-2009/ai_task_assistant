@@ -2,6 +2,7 @@
 Сервис для инференса модели машинного обучения
 """
 
+import logging
 import time
 import torch
 from torch import nn
@@ -13,10 +14,13 @@ import io
 
 from .models_nn import get_pretrained_model
 from ...common.config import config
+from app.ml.base import BaseMLService
 from app.ml.metrics import MLMetricsCollector
 
+logger = logging.getLogger(__name__)
 
-class InferenceService:
+
+class InferenceService(BaseMLService):
     """Сервис для инференса модели машинного обучения"""
 
     def __init__(self, checkpoints_path: Path, idx_to_class: dict[int, str]):
@@ -28,7 +32,13 @@ class InferenceService:
 
         load_start = time.perf_counter()
         self.model: nn.Module = get_pretrained_model(num_classes=len(self.idx_to_class) or None)
-        self.model.load_state_dict(torch.load(self.checkpoints_path), strict=False)
+        if self.checkpoints_path and Path(self.checkpoints_path).exists():
+            self.model.load_state_dict(torch.load(self.checkpoints_path, map_location=self.device), strict=False)
+        else:
+            logger.warning(
+                "Classification checkpoint not found at %s; using base pretrained weights.",
+                self.checkpoints_path,
+            )
         self.model.to(self.device)
         self.model.eval()
         self.metrics.record_load_time(time.perf_counter() - load_start)

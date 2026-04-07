@@ -1,6 +1,21 @@
-version: '3.9'
+version: "3.9"
 
 services:
+  postgres:
+    image: postgres:15
+    container_name: ai_task_assistant_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   redis:
     image: redis:7-alpine
     container_name: ai_task_assistant_redis
@@ -18,14 +33,33 @@ services:
       dockerfile: Dockerfile
     container_name: ai_task_assistant_api
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
-    env_file:
-      - .env
     environment:
-      DATABASE_URL: sqlite+aiosqlite:///./data/app.db
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:password@postgres:5432/postgres}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      LLM_API_KEY: ${LLM_API_KEY:-dummy-llm-key}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_MODEL: ${LLM_MODEL:-meta-llama/llama-3.3-8b-instruct:free}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-60}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      USE_ONNX: ${USE_ONNX:-false}
+      CELERY_INIT_SERVICES_ON_STARTUP: ${CELERY_INIT_SERVICES_ON_STARTUP:-false}
+      MAX_IMAGE_SIZE_PX: ${MAX_IMAGE_SIZE_PX:-1024}
+      DEFAULT_TOP_K: ${DEFAULT_TOP_K:-5}
+      FRAME_CACHE_SIZE: ${FRAME_CACHE_SIZE:-5}
+      YOLO_CONF_THRESHOLD: ${YOLO_CONF_THRESHOLD:-0.35}
+      YOLO_IOU_THRESHOLD: ${YOLO_IOU_THRESHOLD:-0.55}
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-100}
+      RATE_LIMIT_PERIOD_SECONDS: ${RATE_LIMIT_PERIOD_SECONDS:-60}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      METRICS_PATH: ${METRICS_PATH:-/metrics}
+      PYTHONUNBUFFERED: ${PYTHONUNBUFFERED:-1}
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -40,14 +74,33 @@ services:
       dockerfile: Dockerfile
     container_name: ai_task_assistant_celery
     command: celery -A app.celery_app worker -B --loglevel=info
-    env_file:
-      - .env
     environment:
-      DATABASE_URL: sqlite+aiosqlite:///./data/app.db
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:password@postgres:5432/postgres}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      LLM_API_KEY: ${LLM_API_KEY:-dummy-llm-key}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_MODEL: ${LLM_MODEL:-meta-llama/llama-3.3-8b-instruct:free}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-60}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      USE_ONNX: ${USE_ONNX:-false}
+      CELERY_INIT_SERVICES_ON_STARTUP: ${CELERY_INIT_SERVICES_ON_STARTUP:-false}
+      MAX_IMAGE_SIZE_PX: ${MAX_IMAGE_SIZE_PX:-1024}
+      DEFAULT_TOP_K: ${DEFAULT_TOP_K:-5}
+      FRAME_CACHE_SIZE: ${FRAME_CACHE_SIZE:-5}
+      YOLO_CONF_THRESHOLD: ${YOLO_CONF_THRESHOLD:-0.35}
+      YOLO_IOU_THRESHOLD: ${YOLO_IOU_THRESHOLD:-0.55}
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-100}
+      RATE_LIMIT_PERIOD_SECONDS: ${RATE_LIMIT_PERIOD_SECONDS:-60}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      METRICS_PATH: ${METRICS_PATH:-/metrics}
+      PYTHONUNBUFFERED: ${PYTHONUNBUFFERED:-1}
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
