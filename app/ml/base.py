@@ -1,10 +1,10 @@
-"""Shared base interfaces for ML inference services."""
+"""Общие базовые интерфейсы для ML-сервисов инференса."""
 
 from __future__ import annotations
 
 
 class BaseMLService:
-    """Minimal interface for inference services."""
+    """Минимальный интерфейс для сервисов инференса."""
 
     def predict(self, data):
         raise NotImplementedError

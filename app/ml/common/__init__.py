@@ -1,4 +1,4 @@
-"""Common ML utilities and configuration."""
+"""Общие ML-утилиты и конфигурация."""
 
 from .config import MLConfig, config
 

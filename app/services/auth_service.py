@@ -1,4 +1,4 @@
-"""Authentication-oriented business logic isolated from HTTP routers."""
+"""Бизнес-логика аутентификации, изолированная от HTTP-роутеров."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from app.schemas import TokenResponse, UserCreate, UserGet
 
 
 class AuthService:
-    """Operations for user registration and login."""
+    """Операции регистрации и входа пользователя."""
 
     async def register_user(self, session: AsyncSession, user_payload: UserCreate) -> UserGet:
         if not user_payload.username or not user_payload.password:

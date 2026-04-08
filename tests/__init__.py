@@ -1,1 +1,1 @@
-"""Tests package marker for stable imports in CI."""
+"""Маркер пакета тестов для стабильных импортов в CI."""

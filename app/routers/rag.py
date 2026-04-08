@@ -61,7 +61,7 @@ async def ask(
             body.top_k,
             body.use_cache
         )
-        # Ensure response conforms to AskResponse schema
+        # Убеждаемся, что ответ соответствует схеме AskResponse
         if isinstance(result, dict):
             return AskResponse(
                 answer=result.get("answer", ""),

@@ -1,4 +1,4 @@
-"""Backward-compatible wrapper for torch helpers."""
+"""Обратносовместимая обёртка для torch-утилит."""
 
 from .torch_utils import grad_study, linear_regression_training
 

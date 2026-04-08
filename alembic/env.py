@@ -6,31 +6,31 @@ from sqlalchemy import pool
 from alembic import context
 from app.db import Base
 from app.core.config import Settings
-# Import all models to register them with SQLAlchemy
+# Импортируем все модели, чтобы зарегистрировать их в SQLAlchemy
 from app import db_models  # noqa: F401
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
+# Это объект конфигурации Alembic, который предоставляет
+# доступ к значениям используемого .ini-файла.
 alembic_config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# Интерпретируем файл конфигурации для логирования Python.
+# Эта строка настраивает логгеры.
 if alembic_config.config_file_name is not None:
     fileConfig(alembic_config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
+# Добавьте сюда объект MetaData вашей модели
+# для поддержки 'autogenerate'
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 target_metadata = Base.metadata
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
+# Другие значения из конфигурации, определяемые потребностями env.py,
+# можно получить так:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
+    """Запустить миграции в режиме 'offline'.
 
     This configures the context with just a URL
     and not an Engine, though an Engine is acceptable
@@ -41,7 +41,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    # Convert async URL to sync for Alembic
+    # Преобразуем асинхронный URL в синхронный для Alembic
     settings = Settings()
     url = settings.DATABASE_URL.replace("sqlite+aiosqlite://", "sqlite://")
     context.configure(
@@ -56,13 +56,13 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
+    """Запустить миграции в режиме 'online'.
 
     In this scenario we need to create an Engine
     and associate a connection with the context.
 
     """
-    # Convert async URL to sync for Alembic
+    # Преобразуем асинхронный URL в синхронный для Alembic
     settings = Settings()
     url = settings.DATABASE_URL.replace("sqlite+aiosqlite://", "sqlite://")
     configuration = alembic_config.get_section(alembic_config.config_ini_section, {})

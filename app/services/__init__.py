@@ -1,4 +1,4 @@
-"""Service package with business services and shared ML service registry."""
+"""Пакет сервисов с бизнес-логикой и общим реестром ML-сервисов."""
 
 from .auth_service import AuthService
 from .registry import (

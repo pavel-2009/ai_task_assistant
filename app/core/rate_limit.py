@@ -1,4 +1,4 @@
-"""Rate limiting для API."""
+"""Ограничение частоты запросов для API."""
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address

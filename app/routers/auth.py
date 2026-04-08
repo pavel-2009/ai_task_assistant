@@ -1,4 +1,4 @@
-"""Authentication router."""
+"""Роутер аутентификации."""
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import OAuth2PasswordRequestForm

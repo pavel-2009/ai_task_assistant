@@ -7,16 +7,16 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 
 
 def _get_or_create_counter(name: str, documentation: str, labelnames: list):
-    """Get counter from registry or create if not exists."""
-    # Check if already registered
+    """Получить счётчик из реестра или создать, если он отсутствует."""
+    # Проверяем, зарегистрирована ли уже метрика
     if name in REGISTRY._names_to_collectors:
         return REGISTRY._names_to_collectors[name]
     return Counter(name, documentation, labelnames)
 
 
 def _get_or_create_histogram(name: str, documentation: str, labelnames: list):
-    """Get histogram from registry or create if not exists."""
-    # Check if already registered
+    """Получить гистограмму из реестра или создать, если она отсутствует."""
+    # Проверяем, зарегистрирована ли уже метрика
     if name in REGISTRY._names_to_collectors:
         return REGISTRY._names_to_collectors[name]
     return Histogram(name, documentation, labelnames)

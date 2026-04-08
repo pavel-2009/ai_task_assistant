@@ -1,25 +1,25 @@
-# Architecture Overview
+# Обзор архитектуры
 
-## Layers
+## Слои
 
-- `routers` -> HTTP layer with FastAPI endpoints only
-- `services` -> business logic and orchestration
-- `ml` -> ML inference and training components
-- `utils` -> pure helper functions without business logic
+- `routers` → HTTP-слой только с endpoint-ами FastAPI;
+- `services` → бизнес-логика и оркестрация;
+- `ml` → компоненты ML-инференса и обучения;
+- `utils` → чистые вспомогательные функции без бизнес-логики.
 
-## Modules Purpose
+## Назначение модулей
 
-- `auth` -> JWT authentication and security flows
-- `tasks` -> task CRUD and task lifecycle management
-- `nlp` -> embeddings, semantic search, and RAG flows
-- `cv` -> image classification, detection, segmentation, and embeddings
-- `recsys` -> recommendation pipelines
-- `celery` -> background task execution
-- `monitoring` -> metrics, observability, and health checks
+- `auth` → JWT-аутентификация и потоки безопасности;
+- `tasks` → CRUD задач и управление их жизненным циклом;
+- `nlp` → эмбеддинги, семантический поиск и RAG-сценарии;
+- `cv` → классификация изображений, детекция, сегментация и эмбеддинги;
+- `recsys` → рекомендательные пайплайны;
+- `celery` → выполнение фоновых задач;
+- `monitoring` → метрики, наблюдаемость и health-check.
 
-## Layer Rules
+## Правила слоёв
 
-- Routers must not contain business logic.
-- Services must not depend on HTTP concepts.
-- ML code must stay isolated from API routing concerns.
-- Utils must not work with databases or external services.
+- Роутеры не должны содержать бизнес-логику.
+- Сервисы не должны зависеть от HTTP-концепций.
+- ML-код должен быть изолирован от вопросов API-роутинга.
+- Утилиты не должны работать с базами данных или внешними сервисами.

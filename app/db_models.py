@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM модели приложения."""
+"""ORM-модели приложения на SQLAlchemy."""
 
 from sqlalchemy import Column, Integer, String, DateTime, Enum as SqlEnum, ForeignKey, Index
 from enum import Enum

@@ -1,4 +1,4 @@
-"""User-related business logic helpers."""
+"""Утилиты бизнес-логики, связанные с пользователями."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from app.db_models import User
 
 
 class UserService:
-    """Thin user lookup service kept separate from routers."""
+    """Лёгкий сервис поиска пользователей, вынесенный из роутеров."""
 
     async def get_by_username(self, session: AsyncSession, username: str) -> User | None:
         result = await session.execute(select(User).where(User.username == username))

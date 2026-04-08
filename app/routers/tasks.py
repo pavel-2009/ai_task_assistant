@@ -1,4 +1,4 @@
-"""Task management router."""
+"""Роутер управления задачами."""
 
 from __future__ import annotations
 

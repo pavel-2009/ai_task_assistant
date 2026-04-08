@@ -1,4 +1,4 @@
-"""Compatibility exports for ORM models and Pydantic schemas."""
+"""Совместимые экспорты ORM-моделей и Pydantic-схем."""
 
 from app.db_models import Text
 from app.schemas import Recommendation, RecommendationGet

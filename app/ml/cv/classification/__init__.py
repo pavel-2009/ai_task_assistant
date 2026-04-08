@@ -1,4 +1,4 @@
-"""Image classification services and training utilities."""
+"""Сервисы классификации изображений и утилиты обучения."""
 
 from .datasets import TaskImageDataset
 from .inference_service import InferenceService

@@ -1,3 +1,3 @@
-"""Top-level ML package split by domain-specific subpackages."""
+"""Верхнеуровневый пакет ML, разделённый на предметные подпакеты."""
 
 __all__ = ["common", "cv", "nlp"]

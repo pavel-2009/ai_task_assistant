@@ -1,4 +1,4 @@
-"""Backward-compatible wrapper for numeric helpers."""
+"""Обратносовместимая обёртка для числовых утилит."""
 
 from .numeric_utils import cosine_similarity
 
