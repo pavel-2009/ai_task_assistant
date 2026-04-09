@@ -11,7 +11,14 @@ from app.core import config
 def validate_image(image_bytes: bytes) -> bool:
     """Проверка валидности изображения"""
 
+    if not image_bytes:
+        return False
+
     image_array = np.frombuffer(image_bytes, dtype=np.uint8)
+
+    if image_array.size == 0:
+        return False
+
     image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
     if image is None:
