@@ -1,4 +1,4 @@
-"""Lightweight PyTorch helper examples."""
+"""Небольшие примеры вспомогательных функций PyTorch."""
 
 import typing
 
@@ -6,7 +6,7 @@ import torch
 
 
 def grad_study():
-    """Example function for inspecting gradients in PyTorch."""
+    """Пример функции для проверки градиентов в PyTorch."""
     x = torch.tensor([5.0, 5.0, 5.0], requires_grad=True)
     y = x**2 + 3 * x + 1
     y.backward(torch.ones_like(x))
@@ -15,7 +15,7 @@ def grad_study():
 
 
 def linear_regression_training(X: torch.Tensor, Y: torch.Tensor) -> typing.Tuple[float, float]:
-    """Example of training a tiny linear regression model in PyTorch."""
+    """Пример обучения маленькой модели линейной регрессии в PyTorch."""
 
     X = torch.tensor(X, dtype=torch.float32)
     Y = torch.tensor(Y, dtype=torch.float32)

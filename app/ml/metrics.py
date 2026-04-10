@@ -1,4 +1,4 @@
-"""ML-specific Prometheus metrics utilities."""
+"""Утилиты Prometheus-метрик для ML."""
 
 from __future__ import annotations
 

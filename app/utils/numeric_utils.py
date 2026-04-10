@@ -1,10 +1,10 @@
-"""Numeric helpers used by ML and recommendation code."""
+"""Числовые утилиты для ML-кода и рекомендательной системы."""
 
 import numpy as np
 
 
 def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
-    """Compute cosine similarity for two vectors with matching shapes."""
+    """Вычислить косинусное сходство для двух векторов одинаковой формы."""
 
     if vec1.shape != vec2.shape:
         raise ValueError("Vectors must have the same shape")

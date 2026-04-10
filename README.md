@@ -1,30 +1,30 @@
 # AI Task Assistant
 
-FastAPI service for task management with JWT auth, background processing, and demo ML integrations across CV, NLP, and recommendations.
+Сервис на FastAPI для управления задачами с JWT-аутентификацией, фоновой обработкой и демонстрационными ML-интеграциями для CV, NLP и рекомендаций.
 
-## What this project demonstrates
+## Что демонстрирует проект
 
-- FastAPI architecture with routers/services separation
-- JWT authentication and security flows
-- Async processing with Celery + Redis
-- ML integration across CV and NLP pipelines
-- Vector search with FAISS-backed indexes
-- Monitoring via health checks and Prometheus metrics
+- архитектуру FastAPI с разделением на routers/services;
+- JWT-аутентификацию и связанные сценарии безопасности;
+- асинхронную обработку через Celery + Redis;
+- интеграцию ML-пайплайнов для CV и NLP;
+- векторный поиск на индексах FAISS;
+- мониторинг через health-check и метрики Prometheus.
 
-## Architecture
+## Архитектура
 
-See `ARCHITECTURE.md` for layer boundaries and module responsibilities.
+Границы слоёв и ответственность модулей описаны в `ARCHITECTURE.md`.
 
-## Modules
+## Модули
 
-- `auth` - authentication and JWT handling
-- `tasks` - task CRUD and lifecycle flows
-- `nlp` - embeddings, semantic search, NER, and RAG
-- `cv` - classification, detection, segmentation, and image embeddings
-- `recsys` - recommendation services and interaction processing
-- `monitoring` - metrics, health checks, and drift detection
+- `auth` — аутентификация и работа с JWT;
+- `tasks` — CRUD задач и жизненный цикл задач;
+- `nlp` — эмбеддинги, семантический поиск, NER и RAG;
+- `cv` — классификация, детекция, сегментация и эмбеддинги изображений;
+- `recsys` — рекомендательные сервисы и обработка взаимодействий;
+- `monitoring` — метрики, health-check и детекция дрейфа.
 
-## Quick Start
+## Быстрый старт
 
 ### Docker
 
@@ -32,9 +32,9 @@ See `ARCHITECTURE.md` for layer boundaries and module responsibilities.
 docker-compose up --build
 ```
 
-Compose reads environment variables, so for Docker startup you can either export them in your shell or place them in `.env`.
+`docker-compose` читает переменные окружения, поэтому для запуска через Docker можно либо экспортировать их в shell, либо положить в `.env`.
 
-Recommended Docker `.env` keys:
+Рекомендуемые ключи `.env` для Docker:
 
 ```env
 SECRET_KEY=your-secret-key-here
@@ -65,15 +65,15 @@ METRICS_ENABLED=true
 METRICS_PATH=/metrics
 ```
 
-Available services:
+Доступные сервисы:
 
 - API: `http://localhost:8000`
 - Swagger: `http://localhost:8000/docs`
-- Metrics: `http://localhost:8000/metrics`
+- Метрики: `http://localhost:8000/metrics`
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`
 
-### Local
+### Локальный запуск
 
 ```bash
 python -m venv .venv
@@ -82,50 +82,50 @@ pip install -r prod_req.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Run Celery separately:
+Celery запускается отдельно:
 
 ```bash
 celery -A app.celery_app worker -B --loglevel=info
 ```
 
-## Tests
+## Тесты
 
-Run all tests:
+Запуск всех тестов:
 
 ```bash
 pytest
 ```
 
-Run with coverage:
+Запуск с покрытием:
 
 ```bash
 pytest --cov=app
 ```
 
-The repository includes unit tests for isolated logic and integration tests for multi-component flows.
+В репозитории есть модульные тесты для изолированной логики и интеграционные тесты для многошаговых сценариев.
 
-## Monitoring
+## Мониторинг
 
-- `/metrics` exposes Prometheus-compatible metrics
-- API and Celery activity are instrumented for observability
+- `/metrics` отдает метрики в формате Prometheus;
+- API и Celery-инфраструктура инструментированы для наблюдаемости.
 
-## Code Style
+## Стиль кода
 
-Project tooling includes:
+В проекте используются инструменты:
 
 - `black`
 - `ruff`
 - `mypy`
 
-## Useful Files
+## Полезные файлы
 
-- `PORTFOLIO_REVIEW.md` - portfolio review checklist
-- `requirements.txt` / `prod_req.txt` - dependencies
-- `docker-compose.yml` - local orchestration for API, PostgreSQL, Redis, and Celery
+- `PORTFOLIO_REVIEW.md` — чек-лист портфолио-ревью;
+- `requirements.txt` / `prod_req.txt` — зависимости;
+- `docker-compose.yml` — локальная оркестрация API, PostgreSQL, Redis и Celery.
 
-## CI Secrets
+## Секреты CI
 
-GitHub Actions CI can start the whole `docker-compose` stack from repository secrets. The workflow reads these secret names directly:
+GitHub Actions CI может поднимать весь стек `docker-compose` из секретов репозитория. Workflow напрямую читает эти имена секретов:
 
 - `SECRET_KEY`
 - `PYTHONUNBUFFERED`

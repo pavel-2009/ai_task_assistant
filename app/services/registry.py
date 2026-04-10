@@ -1,4 +1,4 @@
-"""Global ML service registry initialized during application startup."""
+"""Глобальный реестр ML-сервисов, инициализируемый при запуске приложения."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ async def init_services(
     inference_checkpoint_path: str | None = None,
     inference_idx_to_class: dict | None = None,
 ) -> None:
-    """Initialize all singleton services once."""
+    """Инициализировать все singleton-сервисы один раз."""
 
     global _initialized
     if _initialized:
@@ -134,7 +134,7 @@ async def ensure_services_initialized(
     inference_checkpoint_path: str | None = None,
     inference_idx_to_class: dict | None = None,
 ) -> None:
-    """Thread-safe service initialization for FastAPI and Celery."""
+    """Потокобезопасная инициализация сервисов для FastAPI и Celery."""
 
     if _initialized:
         return

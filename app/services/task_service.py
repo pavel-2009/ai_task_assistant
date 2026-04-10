@@ -1,4 +1,4 @@
-"""Task business logic separated from HTTP routers."""
+"""Бизнес-логика задач, отделённая от HTTP-роутеров."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from app.schemas import SuccessMessageResponse, TaskCreate, TaskGet, TaskStatusR
 
 
 class TaskService:
-    """CRUD helpers for tasks and their async side effects."""
+    """CRUD-утилиты для задач и их асинхронных побочных эффектов."""
 
     def __init__(
         self,

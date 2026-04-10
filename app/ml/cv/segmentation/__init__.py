@@ -1,4 +1,4 @@
-"""Image segmentation services."""
+"""Сервисы сегментации изображений."""
 
 from .segmentation_service import SegmentationService
 

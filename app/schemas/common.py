@@ -1,64 +1,64 @@
-"""Unified common/shared response schemas for API."""
+"""Единые общие схемы ответов API."""
 
 from pydantic import BaseModel, Field
 from typing import Any, Optional, Literal
 
 
 class ErrorResponse(BaseModel):
-    """Unified error response with code and detail."""
+    """Единый ответ об ошибке с кодом и описанием."""
 
     code: str = Field(description="Error code for programmatic handling (e.g., 'RESOURCE_NOT_FOUND', 'INVALID_INPUT')")
     detail: str = Field(description="Human-readable error message")
 
 
 class SuccessMessageResponse(BaseModel):
-    """Generic success response with a message."""
+    """Универсальный успешный ответ с сообщением."""
 
     message: str = Field(description="Success message")
 
 
 class MessageDetailResponse(BaseModel):
-    """Response with message and detail fields."""
+    """Ответ с полями message и detail."""
 
     message: str = Field(description="Message")
     detail: str = Field(description="Additional details")
 
 
 class CeleryTaskResponse(BaseModel):
-    """Response for async Celery task submission."""
+    """Ответ при отправке асинхронной задачи Celery."""
 
     message: str = Field(description="Message about task submission")
     celery_task_id: str = Field(description="Celery task ID for status tracking")
 
 
 class CeleryTaskStatusBase(BaseModel):
-    """Base class for Celery task status responses."""
+    """Базовый класс ответов о статусе задачи Celery."""
 
     status: str = Field(description="Task status (PENDING, STARTED, SUCCESS, FAILURE)")
     message: Optional[str] = Field(default=None, description="Status message")
 
 
 class CeleryTaskStatusResponse(CeleryTaskStatusBase):
-    """Response for checking Celery task status."""
+    """Ответ для проверки статуса задачи Celery."""
 
     result: Optional[Any] = Field(default=None, description="Task result (for SUCCESS status)")
 
 
 class FileUploadResponse(BaseModel):
-    """Response for file upload operations."""
+    """Ответ для операций загрузки файлов."""
 
     filepath: str = Field(description="Path to the uploaded file")
     filename: str = Field(description="Name of the uploaded file")
 
 
 class EmbeddingResponse(BaseModel):
-    """Response containing embeddings."""
+    """Ответ, содержащий эмбеддинги."""
 
     embedding: list[list[float]] | list[float] = Field(description="Embedding vectors")
 
 
 class SearchResultItem(BaseModel):
-    """A single search result item."""
+    """Один элемент результата поиска."""
 
     text_id: str = Field(description="Text/document ID in vector index")
     task_id: Optional[int] = Field(default=None, description="Task ID when text belongs to task")
@@ -70,34 +70,34 @@ class SearchResultItem(BaseModel):
 
 
 class SearchResults(BaseModel):
-    """Search results collection."""
+    """Коллекция результатов поиска."""
 
     results: list[SearchResultItem] = Field(description="List of search results")
     total: int = Field(default=0, description="Total number of results")
 
 
 class TagsResponse(BaseModel):
-    """Response containing tags."""
+    """Ответ, содержащий теги."""
 
     tags: Optional[list[str]] = Field(default=None, description="List of tags")
 
 
 class TaskStatusResponse(BaseModel):
-    """Response indicating task processing status."""
+    """Ответ со статусом обработки задачи."""
 
     tags: Optional[str] = Field(default=None, description="Processed tags")
     is_processing: bool = Field(description="Whether tags are still being processed")
 
 
 class TokenResponse(BaseModel):
-    """Response containing authentication token."""
+    """Ответ, содержащий токен аутентификации."""
 
     access_token: str = Field(description="JWT access token")
     token_type: str = Field(description="Token type, typically 'bearer'")
 
 
 class HealthComponentStatus(BaseModel):
-    """Health status of a single component."""
+    """Статус здоровья отдельного компонента."""
 
     ready: bool = Field(description="Component readiness status")
     model: Optional[str] = Field(default=None, description="Model name or version")
@@ -111,7 +111,7 @@ class HealthComponentStatus(BaseModel):
 
 
 class PingResponse(BaseModel):
-    """Response for health-check endpoint."""
+    """Ответ для endpoint проверки состояния."""
 
     status: Literal["ok", "degraded"] = Field(description="Overall status ('ok' if all components ready, 'degraded' otherwise)")
     models_ready: bool = Field(description="Whether all models are ready")
@@ -119,28 +119,28 @@ class PingResponse(BaseModel):
 
 
 class StreamingChunkResponse(BaseModel):
-    """Response chunk for streaming endpoints."""
+    """Фрагмент ответа для потоковых endpoint-ов."""
 
     chunk: str = Field(description="Text chunk from the stream")
     is_done: bool = Field(default=False, description="Whether this is the final chunk")
 
 
 class FileDownloadResponse(BaseModel):
-    """Metadata for file download response."""
+    """Метаданные ответа на скачивание файла."""
 
     filename: str = Field(description="Name of the file")
     size: Optional[int] = Field(default=None, description="File size in bytes")
 
 
 class DriftReportResponse(BaseModel):
-    """Response containing drift detection report."""
+    """Ответ, содержащий отчёт о детекции дрейфа."""
 
     status: str = Field(description="Status of the drift detector")
     detail: Optional[str] = Field(default=None, description="Additional details")
 
 
 class DriftHistoryResponse(BaseModel):
-    """Response containing drift history."""
+    """Ответ, содержащий историю дрейфа."""
 
     history: dict = Field(default_factory=dict, description="Historical drift alerts")
     count: int = Field(description="Number of drift alerts")
@@ -149,7 +149,7 @@ class DriftHistoryResponse(BaseModel):
 
 
 class AskResponse(BaseModel):
-    """Response from RAG ask endpoint."""
+    """Ответ endpoint-а RAG ask."""
 
     answer: str = Field(description="Answer from RAG model")
     sources: Optional[list[dict]] = Field(default=None, description="Source documents used")
@@ -158,12 +158,12 @@ class AskResponse(BaseModel):
 
 
 class NLPTagTaskResponse(BaseModel):
-    """Response for NLP tag-task endpoint."""
+    """Ответ для NLP endpoint-а tag-task."""
 
     tags: list[str] = Field(description="Extracted tags/entities from text")
 
 
 class IndexResponse(BaseModel):
-    """Response for text indexing."""
+    """Ответ для индексации текста."""
 
     detail: str = Field(description="Indexing status message")

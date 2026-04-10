@@ -1,10 +1,10 @@
-"""Backward-compatible alias for the unified YOLO service."""
+"""Обратносовместимый алиас для единого YOLO-сервиса."""
 
 from .yolo_service import YoloService
 
 
 class YoloONNXService(YoloService):
-    """Compatibility wrapper for ONNX-based YOLO inference."""
+    """Совместимая обёртка для инференса YOLO на базе ONNX."""
 
     def __init__(self):
         super().__init__(provider="onnx")

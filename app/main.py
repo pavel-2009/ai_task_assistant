@@ -28,7 +28,7 @@ from app.services import (
 )
 from app.schemas.common import PingResponse
 
-import app.db_models  # noqa: F401  # ensure SQLAlchemy models are registered
+import app.db_models  # noqa: F401  # гарантируем регистрацию моделей SQLAlchemy
 
 from .ml.nlp.tasks import reindex_tasks
 from .ml.recsys.tasks import train_collaborative_filtering_model

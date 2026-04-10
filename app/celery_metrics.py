@@ -1,4 +1,4 @@
-"""Prometheus metrics and decorators for Celery tasks."""
+"""Метрики Prometheus и декораторы для задач Celery."""
 
 from __future__ import annotations
 
@@ -11,16 +11,16 @@ from prometheus_client import Counter, Histogram, REGISTRY
 
 
 def _get_or_create_histogram(name: str, documentation: str, labelnames: list, buckets: list = None):
-    """Get histogram from registry or create if not exists."""
-    # Check if already registered
+    """Получить гистограмму из реестра или создать, если она отсутствует."""
+    # Проверяем, зарегистрирована ли уже метрика
     if name in REGISTRY._names_to_collectors:
         return REGISTRY._names_to_collectors[name]
     return Histogram(name, documentation, labelnames, buckets=buckets)
 
 
 def _get_or_create_counter(name: str, documentation: str, labelnames: list):
-    """Get counter from registry or create if not exists."""
-    # Check if already registered
+    """Получить счётчик из реестра или создать, если он отсутствует."""
+    # Проверяем, зарегистрирована ли уже метрика
     if name in REGISTRY._names_to_collectors:
         return REGISTRY._names_to_collectors[name]
     return Counter(name, documentation, labelnames)
@@ -41,7 +41,7 @@ celery_task_total = _get_or_create_counter(
 
 
 def track_celery_task(task_name: str) -> Callable[..., Any]:
-    """Decorator for tracking task execution time and status."""
+    """Декоратор для отслеживания времени выполнения и статуса задачи."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)

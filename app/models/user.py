@@ -1,4 +1,4 @@
-"""User-facing models and schemas."""
+"""Модели и схемы, связанные с пользователями."""
 
 from app.db_models import User
 from app.schemas.user import UserBase, UserCreate, UserGet

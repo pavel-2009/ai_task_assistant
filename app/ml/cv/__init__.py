@@ -1,4 +1,4 @@
-"""Computer vision package split by task domain."""
+"""Пакет компьютерного зрения, разделённый по задачам."""
 
 from .classification import InferenceService
 from .detection import YoloONNXService, YoloService
