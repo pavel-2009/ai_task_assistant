@@ -27,7 +27,6 @@ from app.ml.nlp.semantic_search_service import SemanticSearchService
 from app.ml.nlp.vector_db import VectorDB
 from app.ml.recsys.collaborative_filtering import CollaborativeFilteringRecommender
 from app.ml.recsys.content_based import ContentBasedRecommender
-from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +87,7 @@ async def init_services(
 
     logger.info("Loading vector databases and recommenders")
     _services["vector_db"] = VectorDB(dim=_services["embedding"].dimension, redis_client=redis_client)
-    _services["recsys_vector_db"] = RecSysVectorDB(dim=896, redis_client=redis_client)
+    _services["recsys_vector_db"] = VectorDB(dim=896, redis_client=redis_client)
     _services["content_based_recommender"] = ContentBasedRecommender(
         image_embedding_service=_services["image_embedding"],
         text_embedding_service=_services["embedding"],
@@ -205,7 +204,7 @@ def get_content_based_recommender() -> ContentBasedRecommender:
     return get_service("content_based_recommender")
 
 
-def get_recsys_vector_db() -> RecSysVectorDB:
+def get_recsys_vector_db() -> VectorDB:
     return get_service("recsys_vector_db")
 
 

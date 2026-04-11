@@ -23,7 +23,7 @@ from app.db_models import Task
 
 logger = logging.getLogger(__name__)
 from app.ml.nlp.embedding_service import EmbeddingService
-from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
+from app.ml.nlp.vector_db import VectorDB
 from app.ml.cv.embedding.image_embedding_service import ImageEmbeddingService
 
 
@@ -105,7 +105,7 @@ async def _update_recommendations_for_task_async(task_id: int):
     """Асинхронная реализация обновления рекомендаций."""
     try:
         embedding_service: EmbeddingService = get_embedding()
-        rs_vector_db: RecSysVectorDB = get_recsys_vector_db()
+        rs_vector_db: VectorDB = get_recsys_vector_db()
     except RuntimeError as e:
         logger.warning("Recommendation services are not initialized: %s", e)
         return
@@ -139,11 +139,15 @@ async def _update_recommendations_for_task_async(task_id: int):
         embedding = embedding / np.linalg.norm(embedding)    
         
         # Добавить в vector_db (если нет) или обновить (если есть)
-        if rs_vector_db.ids_to_idx.get(str(task_id)) is not None:
-            await rs_vector_db.update(item_id=str(task_id), embedding=embedding)
-            
-        else: 
-            await rs_vector_db.add_vector(vector=embedding, task_id=str(task_id))
+        item_id = str(task_id)
+        if rs_vector_db.id_to_position.get(item_id) is not None:
+            await rs_vector_db.delete(item_id=item_id)
+
+        await rs_vector_db.add(
+            embeddings=embedding,
+            session=session,
+            item_id=item_id,
+        )
 
 
 @celery_app.task(name="warmup_llm", bind=True, max_retries=10)
