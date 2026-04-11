@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from uuid import uuid4
 import pickle
 import asyncio
@@ -31,72 +33,43 @@ class VectorDB:
         self.dim = dim # Размерность эмбеддингов
         self.index = faiss.IndexFlatIP(dim) # Индекс для поиска по косинусной близости (нормализованные векторы)
         self.ids: list[str] = []
-        self.ids_to_idx: dict[str, int] = {} # Словарь для быстрого поиска индекса по item_id
+        self.id_to_position: dict[str, int] = {} # Словарь для быстрого поиска индекса по item_id
         self.redis_client = redis_client
         self.index_key = "vector_db:faiss_index"
         self.ids_key = "vector_db:ids"
         self.delete_cache_prefix = "vector_db:delete_cache:"
+        self.search_cache_prefix = "vector_db:search_cache:"
         self._lock = asyncio.Lock() # Асинхронный лок для обеспечения потокобезопасности при добавлении и поиске
 
     async def add(
         self,
-        embedding: list[float] | np.ndarray,
+        embeddings: list[float] | list[list[float]] | np.ndarray,
         session: AsyncSession,
-        item_id: str | None = None,
-        text: str = "",
-    ) -> str:
-        """Добавить эмбеддинг и similarity. Сохранить текст в базу данных."""
-        
-        vector = np.asarray(embedding, dtype=np.float32)
-        
-        if vector.ndim != 1:
-            raise ValueError("Эмбеддинг должен быть одномерным вектором")
-        if vector.shape[0] != self.dim:
-            raise ValueError(f"Размерность эмбеддинга должна быть равна {self.dim}")
+        item_id: str | list[str] | None = None,
+        text: str | list[str] | None = None,
+    ) -> str | list[str]:
+        """Добавить один или несколько эмбеддингов и сохранить тексты в базу данных."""
 
-        resolved_item_id = str(item_id) if item_id is not None else str(uuid4())
-        
-        async with self._lock: # Блокируем для обеспечения потокобезопасности при добавлении в индекс и обновлении ids
-            try:
-                self.index.add(vector.reshape(1, -1)) # -1 - для сохранения размерности (1, dim)
-                self.ids.append(resolved_item_id)
-            except Exception as e:
-                raise RuntimeError(f"Ошибка при добавлении эмбеддинга в индекс: {e}")
-        
-        await session.execute(
-            insert(Text).values(text_id=resolved_item_id, text=text)
-        )
-        
-        self.ids_to_idx[resolved_item_id] = len(self.ids) - 1
-        
-        return resolved_item_id
-    
-    async def add_batch(
-        self,
-        embeddings: list[list[float]] | np.ndarray,
-        session: AsyncSession,
-        item_ids: list[str] | None = None,
-        texts: list[str] | None = None
-    ) -> list[str]:
-        """Добавить несколько эмбеддингов и сохранить тексты в базу данных."""
-        
         vectors = np.asarray(embeddings, dtype=np.float32)
-        
-        if vectors.ndim != 2 or vectors.shape[1] != self.dim:
-            raise ValueError(f"Эмбеддинги должны быть двумерным массивом с размерностью {self.dim}")
+        if vectors.ndim == 1:
+            vectors = vectors.reshape(1, -1)
+
+        if vectors.ndim != 2 or vectors.shape[0] == 0 or vectors.shape[1] != self.dim:
+            raise ValueError(f"Эмбеддинги должны быть непустым массивом формы (n, {self.dim})")
 
         batch_size = vectors.shape[0]
-        
-        # Валидация item_ids
-        if item_ids is not None and len(item_ids) != batch_size:
-            raise ValueError(f"Длина item_ids ({len(item_ids)}) не совпадает с количеством эмбеддингов ({batch_size})")
-        
-        # Валидация texts
-        if texts is not None and len(texts) != batch_size:
-            raise ValueError(f"Длина texts ({len(texts)}) не совпадает с количеством эмбеддингов ({batch_size})")
 
-        resolved_item_ids = [str(item_id) for item_id in item_ids] if item_ids is not None else [str(uuid4()) for _ in range(batch_size)]
-        
+        item_ids = [item_id] if isinstance(item_id, str) else item_id
+        texts = [text] if isinstance(text, str) else text
+
+        if item_ids is not None and len(item_ids) != batch_size:
+            raise ValueError(f"Длина item_id ({len(item_ids)}) не совпадает с количеством эмбеддингов ({batch_size})")
+        if texts is not None and len(texts) != batch_size:
+            raise ValueError(f"Длина text ({len(texts)}) не совпадает с количеством эмбеддингов ({batch_size})")
+
+        resolved_item_ids = [str(value) for value in item_ids] if item_ids is not None else [str(uuid4()) for _ in range(batch_size)]
+        resolved_texts = texts or [""] * batch_size
+
         async with self._lock:
             try:
                 self.index.add(vectors)
@@ -104,32 +77,38 @@ class VectorDB:
             except Exception as e:
                 raise RuntimeError(f"Ошибка при добавлении эмбеддингов в индекс: {e}")
         
-        if texts:
+        if any(resolved_texts):
             await session.execute(
                 insert(Text).values([
-                    {"text_id": item_id, "text": text} for item_id, text in zip(resolved_item_ids, texts)
+                    {"text_id": current_id, "text": current_text}
+                    for current_id, current_text in zip(resolved_item_ids, resolved_texts)
                 ])
             )
-            
-        for item_id in resolved_item_ids:
-            self.ids_to_idx[item_id] = len(self.ids) - batch_size + resolved_item_ids.index(item_id)
-        
-        return resolved_item_ids
+
+        start_index = len(self.ids) - batch_size
+        self.id_to_position.update(
+            {current_id: start_index + idx for idx, current_id in enumerate(resolved_item_ids)}
+        )
+
+        return resolved_item_ids[0] if batch_size == 1 else resolved_item_ids
     
     async def search(
         self,
         query_embedding: list[float] | np.ndarray,
         session: AsyncSession,
         top_k: int = config.DEFAULT_TOP_K,
+        query: str | None = None,
     ) -> list[dict]:
         """Поиск наиболее похожих текстов по эмбеддингу запроса."""
-        
+
+        cache_key = self._build_search_cache_key(query, top_k)
+        cached_result = await self._get_from_cache(cache_key) if cache_key else None
+        if cached_result is not None:
+            return cached_result
+
         vector = np.asarray(query_embedding, dtype=np.float32)
-        
-        if vector.ndim != 1 or vector.size == 0:
-            raise ValueError("Эмбеддинг запроса не может быть пустым")
-        if vector.shape[0] != self.dim:
-            raise ValueError(f"Размерность эмбеддинга должна быть равна {self.dim}")
+        if vector.ndim != 1 or vector.size == 0 or vector.shape[0] != self.dim:
+            raise ValueError(f"Эмбеддинг запроса должен быть непустым вектором размерности {self.dim}")
         
         async with self._lock:
             if not self.ids:
@@ -143,34 +122,35 @@ class VectorDB:
             similarities, indices = self.index.search(vector.reshape(1, -1), limit)
 
         results: list[dict] = []
-        
-        # Фильтруем только валидные индексы (>=0 и < len(self.ids))
-        valid_entries = [
-            (idx, sim) for idx, sim in zip(indices[0], similarities[0])
-            if idx >= 0 and idx < len(self.ids)
-        ]
-        
-        if valid_entries:
-            text_ids = [self.ids[idx] for idx, _ in valid_entries]
+        valid_indices = [idx for idx in indices[0] if 0 <= idx < len(self.ids)]
+        valid_index_set = set(valid_indices)
+        if valid_indices:
+            text_ids = [self.ids[idx] for idx in valid_indices]
             texts = await session.execute(select(Text).where(Text.text_id.in_(text_ids)))
-            
             text_map = {text.text_id: text.text for text in texts.scalars().all()}
-            
-            for idx, sim in valid_entries:
+
+            for idx, sim in zip(indices[0], similarities[0]):
+                if idx not in valid_index_set:
+                    continue
+
                 text_id = self.ids[idx]
-                task_id = int(text_id) if text_id.isdigit() else None
                 text_value = text_map.get(text_id, "")
                 title, _, description = text_value.partition("\n")
-                results.append({"text_id": text_id, "similarity": float(sim), "text": text_map.get(text_id, "")})
-                results[-1].update(
+                score = float(sim)
+                results.append(
                     {
-                        "task_id": task_id,
+                        "text_id": text_id,
+                        "similarity": score,
+                        "text": text_value,
+                        "task_id": int(text_id) if text_id.isdigit() else None,
                         "title": title or None,
                         "description": description or None,
-                        "score": float(sim),
+                        "score": score,
                     }
                 )
 
+        if cache_key and results:
+            await self._save_to_cache(cache_key, results)
         return results
 
     async def save_to_redis(self) -> bool:
@@ -205,6 +185,7 @@ class VectorDB:
                     self.index = faiss.deserialize_index(index_bytes)
                 if ids_bytes:
                     self.ids = pickle.loads(ids_bytes)
+                self.id_to_position = {current_id: idx for idx, current_id in enumerate(self.ids)}
 
             return bool(index_bytes or ids_bytes)
         except Exception:
@@ -217,7 +198,7 @@ class VectorDB:
         """Удалить документ из индекса, сохранив остальные записи через кэш Redis."""
 
         async with self._lock:
-            if item_id not in self.ids_to_idx:
+            if item_id not in self.id_to_position:
                 return
 
             retained_ids = [current_id for current_id in self.ids if current_id != item_id]
@@ -237,7 +218,7 @@ class VectorDB:
 
             self.index.reset() # Сброс индекса, так как FAISS не поддерживает удаление отдельных векторов
             self.ids = retained_ids
-            self.ids_to_idx = {current_id: idx for idx, current_id in enumerate(self.ids)}
+            self.id_to_position = {current_id: idx for idx, current_id in enumerate(self.ids)}
 
             vectors_to_restore: list[np.ndarray] = []
             keys_to_cleanup: list[str] = []
@@ -261,4 +242,48 @@ class VectorDB:
 
             if self.redis_client is not None and keys_to_cleanup:
                 await self.redis_client.delete(*keys_to_cleanup)
+
+    def _build_search_cache_key(self, query: str | None, top_k: int) -> str | None:
+        """Собрать ключ кеша для поиска по запросу."""
+        if query is None:
+            return None
+        query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
+        return f"{self.search_cache_prefix}{query_hash}:{top_k}"
+
+    async def _get_from_cache(self, cache_key: str) -> list[dict] | None:
+        """Получить результаты поиска из кеша Redis."""
+        if self.redis_client is None:
+            return None
+
+        try:
+            cached = await self.redis_client.get(cache_key)
+            return json.loads(cached) if cached else None
+        except Exception:
+            return None
+
+    async def _save_to_cache(self, cache_key: str, results: list[dict], ttl: int = 3600) -> None:
+        """Сохранить результаты поиска в кеш Redis."""
+        if self.redis_client is None:
+            return
+
+        try:
+            await self.redis_client.setex(cache_key, ttl, json.dumps(results, ensure_ascii=False))
+        except Exception:
+            return
+
+    async def clear_search_cache(self) -> None:
+        """Очистить весь кеш поиска."""
+        if self.redis_client is None:
+            return
+
+        try:
+            cursor = 0
+            while True:
+                cursor, keys = await self.redis_client.scan(cursor, match=f"{self.search_cache_prefix}*")
+                if keys:
+                    await self.redis_client.delete(*keys)
+                if cursor == 0:
+                    break
+        except Exception:
+            return
         
