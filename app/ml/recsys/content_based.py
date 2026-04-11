@@ -13,7 +13,7 @@ import redis
 from app.core import config
 from app.ml.cv.embedding.image_embedding_service import ImageEmbeddingService
 from app.ml.nlp.embedding_service import EmbeddingService
-from app.ml.recsys.vector_db.recsys_vector_db import RecSysVectorDB
+from app.ml.nlp.vector_db import VectorDB
 from app.db_models import Task
 
 
@@ -25,12 +25,12 @@ class ContentBasedRecommender:
         self,
         image_embedding_service: ImageEmbeddingService = None,
         text_embedding_service: EmbeddingService = None,
-        image_vector_db: RecSysVectorDB = None,
+        image_vector_db: VectorDB = None,
         redis_client: redis.Redis = None
     ):
         self.image_embedding_service: ImageEmbeddingService = image_embedding_service or ImageEmbeddingService()
         self.text_embedding_service: EmbeddingService = text_embedding_service or EmbeddingService()
-        self.recsys_vector_db: RecSysVectorDB = image_vector_db or RecSysVectorDB(dim=896, redis_client=redis_client)
+        self.recsys_vector_db: VectorDB = image_vector_db or VectorDB(dim=896, redis_client=redis_client)
 
 
     async def _get_image_embedding(self, image: str):
@@ -113,10 +113,20 @@ class ContentBasedRecommender:
         """Находим похожие задачи на основе эмбеддингов."""
         
         # Ищем похожие задачи в векторной базе данных изображений
-        search_results = await self.recsys_vector_db.search(task_embedding, top_k=top_k)
+        search_results = await self.recsys_vector_db.search(
+            query_embedding=task_embedding,
+            session=session,
+            top_k=top_k,
+        )
         if not search_results:
             return []
-        score_by_task_id = {int(task_id): float(score) for task_id, score in search_results}
+        score_by_task_id = {
+            result["task_id"]: float(result.get("score", result.get("similarity", 0.0)))
+            for result in search_results
+            if result.get("task_id") is not None
+        }
+        if not score_by_task_id:
+            return []
         found_task_ids = list(score_by_task_id.keys())
         
         # Получаем данные похожих задач из базы данных
